@@ -1,6 +1,6 @@
 {
   "name": "standard-tool",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Standard DRY LLM Tool Interface — name/description/execute with input & output validated via Standard Schema and emitted as JSON Schema via Standard JSON Schema. Zero dependencies.",
   "type": "module",
   "main": "./dist/index.js",

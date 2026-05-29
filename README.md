@@ -20,14 +20,14 @@ const getWeather = standardTool({
   execute: async ({ city }) => ({ tempC: 21 }), // `city` is typed; the return is validated
 });
 
-await getWeather.execute({ city: 'Paris' }); // → { tempC: number }, validated in & out
+await getWeather.execute({ city: 'Paris' }); // → { tempC: number } | { error: string }; validated in & out, never throws
 ```
 
 ## What it is
 
-- **Standalone & dependency-free.** A single ~30-line function. The Standard Schema and Standard JSON Schema interfaces are vendored into the package, so installing it pulls in nothing else — and you can just copy the source into your project instead (see [below](#or-just-copy-paste-it)).
-- **A convention, not a framework.** It doesn't run your agent, call your model, or own your runtime. It defines only the shape — `{ name, description, inputSchema, outputSchema, execute }` — and the two things every tool needs: validation and a JSON Schema.
-- **Validates input _and_ output.** `execute` accepts untrusted input (e.g. JSON arguments from a model), validates it via Standard Schema, runs your logic, then validates the result. Bad data throws a `ToolValidationError`.
+- **Standalone & dependency-free.** A single, small function. The Standard Schema and Standard JSON Schema interfaces are vendored into the package, so installing it pulls in nothing else — and you can just copy the source into your project instead (see [below](#or-just-copy-paste-it)).
+- **A convention, not a framework.** It doesn't run your agent, call your model, or own your runtime. It defines only the shape — `{ name, description, inputSchema, outputSchema, execute, toModelOutput }` — and the things every tool needs: validation, a JSON Schema, and a model-facing result.
+- **Validates input _and_ output — without throwing.** `execute` accepts untrusted input (e.g. JSON arguments from a model), validates it via Standard Schema, runs your logic, then validates the result. A validation failure or a thrown error doesn't crash your loop — it comes back as `{ error: string }` (customize via `toModelOutput`), so the model always gets a value.
 - **Emits JSON Schema for any model.** Because the schemas implement Standard JSON Schema, you get an OpenAI- or MCP-ready JSON Schema (any function-calling model) synchronously via `inputSchema['~standard'].jsonSchema.input(...)`.
 
 ## Why
@@ -50,6 +50,7 @@ No dependency at all. Paste this and import the spec types from the official, ty
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 
 type CombinedSchema<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
+type DefaultModelOutput<Output> = Output | { error: string };
 
 export class ToolValidationError extends Error {
   constructor(readonly target: 'input' | 'output', readonly issues: readonly StandardSchemaV1.Issue[]) {
@@ -61,33 +62,45 @@ export class ToolValidationError extends Error {
   }
 }
 
-export interface StandardTool<Input, Output> {
+export interface StandardTool<Input, Output, ModelOutput = DefaultModelOutput<Output>> {
   name: string;
   description: string;
   inputSchema: CombinedSchema<Input>;
   outputSchema: CombinedSchema<Output>;
-  execute(input: Input): Output | Promise<Output>;
+  execute(input: Input): ModelOutput | Promise<ModelOutput>;
+  toModelOutput(result: Output | Error): ModelOutput | Promise<ModelOutput>;
 }
 
-export function standardTool<Input, Output>(def: {
+export function standardTool<Input, Output, ModelOutput = DefaultModelOutput<Output>>(def: {
   name: string;
   description: string;
   inputSchema: CombinedSchema<Input>;
   outputSchema: CombinedSchema<Output>;
   execute: (input: Input) => Output | Promise<Output>;
-}): StandardTool<Input, Output> {
+  toModelOutput?: (result: Output | Error) => ModelOutput | Promise<ModelOutput>;
+}): StandardTool<Input, Output, ModelOutput> {
   const check = async <T>(t: 'input' | 'output', s: CombinedSchema<T>, v: unknown): Promise<T> => {
     const r = await s['~standard'].validate(v);
     if (r.issues) throw new ToolValidationError(t, r.issues);
     return r.value;
   };
+  const toModelOutput =
+    def.toModelOutput ??
+    ((result: Output | Error) => (result instanceof Error ? { error: result.message } : result) as unknown as ModelOutput);
   return {
     name: def.name,
     description: def.description,
     inputSchema: def.inputSchema,
     outputSchema: def.outputSchema,
+    toModelOutput,
     async execute(input) {
-      return check('output', def.outputSchema, await def.execute(await check('input', def.inputSchema, input)));
+      let result: Output | Error;
+      try {
+        result = await check('output', def.outputSchema, await def.execute(await check('input', def.inputSchema, input)));
+      } catch (e) {
+        result = e instanceof Error ? e : new Error(String(e));
+      }
+      return toModelOutput(result);
     },
   };
 }
@@ -96,12 +109,12 @@ export function standardTool<Input, Output>(def: {
 ## API
 
 ```ts
-import { standardTool, type StandardTool, ToolValidationError } from 'standard-tool';
+import { standardTool, type StandardTool, type ToModelOutputFn, ToolValidationError } from 'standard-tool';
 
-standardTool(def): StandardTool<Input, Output>;
+standardTool(def): StandardTool<Input, Output, ModelOutput>;
 ```
 
-`def` and the returned `StandardTool<Input, Output>` share these fields — nothing more. `Input`/`Output` are your **data types** (what `execute` accepts and returns); the schemas describe them:
+`Input`/`Output` are your **data types** (what your `execute` accepts and returns); the schemas describe them. `ModelOutput` is what the tool hands the model after formatting — `Output | { error: string }` by default.
 
 | field | type | purpose |
 | --- | --- | --- |
@@ -109,11 +122,13 @@ standardTool(def): StandardTool<Input, Output>;
 | `description` | `string` | what the tool does |
 | `inputSchema` | `CombinedSchema<Input>` | input schema — validates **and** emits JSON Schema |
 | `outputSchema` | `CombinedSchema<Output>` | output schema — validates **and** emits JSON Schema |
-| `execute` | `(input: Input) => Output \| Promise<Output>` | validate input → run your `execute` → validate output |
+| `execute` (yours) | `(input: Input) => Output \| Promise<Output>` | your logic — receives validated input, returns the output |
+| `execute` (tool) | `(input: Input) => ModelOutput \| Promise<ModelOutput>` | validate in → run yours → validate out → format; **never throws by default** |
+| `toModelOutput?` | `(result: Output \| Error) => ModelOutput` | optional formatter; default `result instanceof Error ? { error: result.message } : result` |
 
 `inputSchema`/`outputSchema` must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`) — `Input`/`Output` are inferred from them.
 
-`standardTool` is deliberately a **thin utility**: the returned tool is your `def` with every field passed through **as-is** — `name`, `description`, `inputSchema`, and `outputSchema` are the exact values you handed in. Only `execute` is wrapped, so it's typed (`(input: Input) => Output`) and **validates input and output** at runtime, throwing `ToolValidationError` on a mismatch. That's the whole job.
+`standardTool` is deliberately a **thin utility**: `name`, `description`, `inputSchema`, and `outputSchema` are returned **exactly as you passed them**. Only two things are added — `execute` is wrapped so it validates input and output and routes the result (or any error) through `toModelOutput`, and `toModelOutput` defaults to the `{ error }` envelope when you don't supply one. So bad data — or a thrown error — comes back as `{ error: string }` instead of throwing, keeping a model loop alive; pass your own `toModelOutput` to reshape the output (its return type becomes the tool's output), or to re-throw and restore throwing. That's the whole job.
 
 ## Usage
 
@@ -129,8 +144,8 @@ const getWeather = standardTool({
   execute: async ({ city }) => ({ tempC: 21 }),
 });
 
-// validated end to end — throws ToolValidationError on bad input or output:
-const out = await getWeather.execute({ city: 'Paris' }); // { tempC: number }
+// validated end to end — bad input or output comes back as { error: string }, never a throw:
+const out = await getWeather.execute({ city: 'Paris' }); // { tempC: number } | { error: string }
 
 // JSON Schema for the model (Standard JSON Schema), synchronous:
 const parameters = getWeather.inputSchema['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
@@ -138,7 +153,7 @@ const parameters = getWeather.inputSchema['~standard'].jsonSchema.input({ target
 
 ## With the OpenAI API
 
-Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). Because every tool is the same neutral shape, you keep them in one array: `.map` it into the request's `tools`, then dispatch each function call back to the matching tool by `name`. Adding a fourth tool is one more array entry — no special-casing, no per-tool wiring.
+Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). Because every tool is the same neutral shape, you keep them in one array: `.map` it into the request's `tools`, then dispatch each function call back to the matching tool by `name`. Adding a fourth tool is one more array entry — no special-casing, no per-tool wiring. And because `execute` never throws by default, a malformed tool call comes back to the model as `{ error }` to self-correct, instead of crashing your loop.
 
 ```ts
 import OpenAI from 'openai';
@@ -192,7 +207,7 @@ for (const item of res.output) {
   if (item.type !== 'function_call') continue;
   const tool = tools.find((t) => t.name === item.name);
   if (!tool) continue;
-  const result = await tool.execute(JSON.parse(item.arguments)); // validates args + result
+  const result = await tool.execute(JSON.parse(item.arguments)); // validates args + result; never throws (bad args → { error })
   input.push({ type: 'function_call_output', call_id: item.call_id, output: JSON.stringify(result) });
 }
 

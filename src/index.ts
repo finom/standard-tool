@@ -2,116 +2,74 @@ import type { CombinedSchema, StandardSchemaV1 } from './standard-schema.js';
 
 export type * from './standard-schema.js';
 
-/**
- * Thrown internally when input or output fails Standard Schema validation. By default it is caught
- * by {@link StandardTool.execute} and handed to {@link StandardTool.toModelOutput}; it surfaces as
- * a real exception only if your `toModelOutput` re-throws it.
- */
-export class ToolValidationError extends Error {
-  constructor(
-    readonly target: 'input' | 'output',
-    readonly issues: readonly StandardSchemaV1.Issue[]
-  ) {
-    super(`${target} validation failed: ${issues.map((i) => i.message).join('; ')}`);
-    this.name = 'ToolValidationError';
-  }
-
-  /** Serialize to a plain object so `JSON.stringify(err)` is useful — e.g. feeding the error back to a model. */
-  toJSON() {
-    return { name: this.name, target: this.target, message: this.message, issues: this.issues };
-  }
-}
-
 /** The default model-facing output: your `Output`, or an `{ error }` envelope when execution or validation failed. */
 export type DefaultModelOutput<Output> = Output | { error: string };
 
 /**
- * Maps a raw tool result — your `Output`, or an `Error` (a {@link ToolValidationError} on validation
- * failure) — to the model-facing output. Return an envelope to keep a model loop running, or re-throw
- * to surface the error.
+ * Maps a raw tool result — your `Output`, or an `Error` (carrying `issues` when a Standard Schema
+ * validation failed) — to the model-facing output. Return an envelope to keep a model loop running,
+ * or throw to surface the error.
  */
-export type ToModelOutputFn<Output, ModelOutput> = (result: Output | Error) => ModelOutput | Promise<ModelOutput>;
+export type FormatOutputFn<Output, ModelOutput> = (result: Output | Error) => ModelOutput | Promise<ModelOutput>;
 
 /**
  * A standard, DRY LLM tool over its **data** types `Input`/`Output`: `name` + `description` +
- * Standard-Schema/JSON-Schema `inputSchema`/`outputSchema` + `execute(input: Input)`, validating both
- * at runtime. `ModelOutput` is what `execute` actually returns to the model after `toModelOutput`
- * formats the result — by default {@link DefaultModelOutput}, i.e. the data or an `{ error }` envelope.
+ * optional Standard-Schema/JSON-Schema `inputSchema`/`outputSchema` + `execute(input: Input)`.
+ * `ModelOutput` is what `execute` returns to the model after formatting — by default
+ * {@link DefaultModelOutput}, i.e. the data or an `{ error }` envelope.
  */
 export interface StandardTool<Input, Output, ModelOutput = DefaultModelOutput<Output>> {
   name: string;
   description: string;
-  /** Standard Schema + Standard JSON Schema describing the input data. */
-  inputSchema: CombinedSchema<Input>;
-  /** Standard Schema + Standard JSON Schema describing the output data. */
-  outputSchema: CombinedSchema<Output>;
+  /** Optional Standard Schema + Standard JSON Schema describing the input data. */
+  inputSchema?: CombinedSchema<Input>;
+  /** Optional Standard Schema + Standard JSON Schema describing the output data. */
+  outputSchema?: CombinedSchema<Output>;
   /**
-   * Validate input → run your logic → validate output → format via {@link StandardTool.toModelOutput}.
-   * **Never throws by default**: a validation failure or a thrown error becomes the formatted output
-   * (`{ error: string }`), so a model-calling loop always gets a value back.
+   * Validate input (when `inputSchema`) → run your logic → validate output (when `outputSchema`) →
+   * format. **Never throws by default**: a validation failure or a thrown error becomes the formatted
+   * output (`{ error: string }`), so a model-calling loop always gets a value back.
    */
   execute(input: Input): ModelOutput | Promise<ModelOutput>;
-  /**
-   * Maps the raw result (your `Output`, or an `Error`) to what the model receives. Default:
-   * `result instanceof Error ? { error: result.message } : result`.
-   */
-  toModelOutput(result: Output | Error): ModelOutput | Promise<ModelOutput>;
 }
 
 /**
- * Create a standard tool. `inputSchema`/`outputSchema` must implement both Standard Schema
- * (validation) and Standard JSON Schema (JSON Schema emission) — e.g. Zod 4.2+, ArkType 2.1.28+,
- * or Valibot 1.2+ via `@valibot/to-json-schema`.
+ * Create a standard tool. `inputSchema`/`outputSchema` are optional; when present they must implement
+ * both Standard Schema (validation) and Standard JSON Schema (JSON Schema emission) — e.g. Zod 4.2+,
+ * ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`.
  *
- * Your `execute` receives the validated input and returns the output. The returned tool's `execute`
- * validates input, runs yours, validates the result, then formats it via `toModelOutput` — which by
+ * Your `execute` receives the (validated) input and returns the output. The returned tool's `execute`
+ * validates input, runs yours, validates the result, then formats it via `formatOutput` — which by
  * default turns any error into `{ error: message }` instead of throwing, so a model loop keeps going.
- * Pass your own `toModelOutput` to reshape the output (its return type becomes the tool's output), or
- * to re-throw and restore throwing behavior.
+ * Pass your own `formatOutput` to reshape the output (its return type becomes the tool's `ModelOutput`)
+ * or to throw and surface the error. Validation failures are plain `Error`s carrying an `issues` array.
  */
-export function standardTool<Input, Output, ModelOutput>(def: {
+export function standardTool<Input, Output, ModelOutput = DefaultModelOutput<Output>>(def: {
   name: string;
   description: string;
-  inputSchema: CombinedSchema<Input>;
-  outputSchema: CombinedSchema<Output>;
+  inputSchema?: CombinedSchema<Input>;
+  outputSchema?: CombinedSchema<Output>;
   execute: (input: Input) => Output | Promise<Output>;
-  toModelOutput: ToModelOutputFn<Output, ModelOutput>;
-}): StandardTool<Input, Output, ModelOutput>;
-export function standardTool<Input, Output>(def: {
-  name: string;
-  description: string;
-  inputSchema: CombinedSchema<Input>;
-  outputSchema: CombinedSchema<Output>;
-  execute: (input: Input) => Output | Promise<Output>;
-  toModelOutput?: undefined;
-}): StandardTool<Input, Output, DefaultModelOutput<Output>>;
-export function standardTool<Input, Output, ModelOutput>(def: {
-  name: string;
-  description: string;
-  inputSchema: CombinedSchema<Input>;
-  outputSchema: CombinedSchema<Output>;
-  execute: (input: Input) => Output | Promise<Output>;
-  toModelOutput?: ToModelOutputFn<Output, ModelOutput>;
+  formatOutput?: FormatOutputFn<Output, ModelOutput>;
 }): StandardTool<Input, Output, ModelOutput> {
-  const toModelOutput: ToModelOutputFn<Output, ModelOutput> =
-    def.toModelOutput ??
+  const formatOutput: FormatOutputFn<Output, ModelOutput> =
+    def.formatOutput ??
     ((result) => (result instanceof Error ? { error: result.message } : result) as unknown as ModelOutput);
   return {
     name: def.name,
     description: def.description,
     inputSchema: def.inputSchema,
     outputSchema: def.outputSchema,
-    toModelOutput,
     async execute(input) {
       let result: Output | Error;
       try {
-        const validInput = await validate('input', def.inputSchema, input);
+        const validInput = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
         const output = await def.execute(validInput);
-        result = await validate('output', def.outputSchema, output);
+        result = def.outputSchema ? await validate('output', def.outputSchema, output) : output;
       } catch (error) {
         result = error instanceof Error ? error : new Error(String(error));
       }
-      return toModelOutput(result);
+      return formatOutput(result);
     },
   };
 }
@@ -122,6 +80,11 @@ async function validate<S extends StandardSchemaV1>(
   value: unknown
 ): Promise<StandardSchemaV1.InferOutput<S>> {
   const result = await schema['~standard'].validate(value); // await covers sync + async
-  if (result.issues) throw new ToolValidationError(target, result.issues);
+  if (result.issues) {
+    // A plain Error carrying the Standard Schema issues — no dedicated error type needed.
+    throw Object.assign(new Error(`${target} validation failed: ${result.issues.map((i) => i.message).join('; ')}`), {
+      issues: result.issues,
+    });
+  }
   return result.value;
 }

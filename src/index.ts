@@ -11,6 +11,11 @@ export class ToolValidationError extends Error {
     super(`${target} validation failed: ${issues.map((i) => i.message).join('; ')}`);
     this.name = 'ToolValidationError';
   }
+
+  /** Serialize to a plain object so `JSON.stringify(err)` is useful — e.g. feeding the error back to a model. */
+  toJSON() {
+    return { name: this.name, target: this.target, message: this.message, issues: this.issues };
+  }
 }
 
 /**

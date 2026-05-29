@@ -66,6 +66,26 @@ test('throws ToolValidationError on invalid input', async () => {
   );
 });
 
+test('ToolValidationError is JSON-serializable via toJSON', async () => {
+  await assert.rejects(
+    () => weather.execute({ city: 123 } as unknown as { city: string }),
+    (err) => {
+      assert.ok(err instanceof ToolValidationError);
+      const json = JSON.parse(JSON.stringify(err)) as {
+        name: string;
+        target: string;
+        message: string;
+        issues: unknown[];
+      };
+      assert.equal(json.name, 'ToolValidationError');
+      assert.equal(json.target, 'input');
+      assert.ok(Array.isArray(json.issues));
+      assert.match(json.message, /city must be a string/);
+      return true;
+    }
+  );
+});
+
 test('throws ToolValidationError on invalid output', async () => {
   const bad = standardTool({
     name: 'bad',

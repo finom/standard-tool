@@ -1,25 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { standardTool, ToolValidationError } from '../dist/index.js';
+import { standardTool, ToolValidationError, type StandardTool, type CombinedSchema } from '../dist/index.js';
 
 // A minimal inline CombinedSchema (validate + jsonSchema), like Zod/ArkType/Valibot provide.
-const makeSchema = (check, jsonIn) => ({
+const makeSchema = <T>(
+  check: (value: unknown) => string | null,
+  jsonIn: Record<string, unknown>
+): CombinedSchema<T> => ({
   '~standard': {
     version: 1,
     vendor: 'test',
-    validate: (v) => {
-      const err = check(v);
-      return err ? { issues: [{ message: err }] } : { value: v };
+    validate: (value) => {
+      const error = check(value);
+      return error ? { issues: [{ message: error }] } : { value: value as T };
     },
     jsonSchema: { input: () => jsonIn, output: () => ({}) },
   },
 });
 
-const inputSchema = makeSchema(
-  (v) => (v && typeof v.city === 'string' ? null : 'city must be a string'),
+const inputSchema = makeSchema<{ city: string }>(
+  (v) => (typeof (v as { city?: unknown })?.city === 'string' ? null : 'city must be a string'),
   { type: 'object', properties: { city: { type: 'string' } }, required: ['city'], additionalProperties: false }
 );
-const outputSchema = makeSchema((v) => (v && typeof v.tempC === 'number' ? null : 'tempC must be a number'), {});
+const outputSchema = makeSchema<{ tempC: number }>(
+  (v) => (typeof (v as { tempC?: unknown })?.tempC === 'number' ? null : 'tempC must be a number'),
+  {}
+);
 
 const weather = standardTool({
   name: 'get_weather',
@@ -28,6 +34,9 @@ const weather = standardTool({
   outputSchema,
   execute: async ({ city }) => ({ tempC: 21 }),
 });
+
+// the returned tool conforms to the exported StandardTool type (data types, not schema types):
+weather satisfies StandardTool<{ city: string }, { tempC: number }>;
 
 test('exposes exactly name, description, inputSchema, outputSchema, execute', () => {
   assert.deepEqual(Object.keys(weather).sort(), ['description', 'execute', 'inputSchema', 'name', 'outputSchema']);
@@ -47,7 +56,7 @@ test('exposes JSON Schema via Standard JSON Schema', () => {
 
 test('throws ToolValidationError on invalid input', async () => {
   await assert.rejects(
-    () => weather.execute({ city: 123 }),
+    () => weather.execute({ city: 123 } as unknown as { city: string }),
     (err) => {
       assert.ok(err instanceof ToolValidationError);
       assert.equal(err.target, 'input');
@@ -63,7 +72,7 @@ test('throws ToolValidationError on invalid output', async () => {
     description: 'returns a wrong shape',
     inputSchema,
     outputSchema,
-    execute: async () => ({ tempC: 'hot' }),
+    execute: async () => ({ tempC: 'hot' }) as unknown as { tempC: number },
   });
   await assert.rejects(
     () => bad.execute({ city: 'Paris' }),
@@ -76,11 +85,11 @@ test('throws ToolValidationError on invalid output', async () => {
 });
 
 test('supports async validators', async () => {
-  const num = {
+  const num: CombinedSchema<number> = {
     '~standard': {
       version: 1,
       vendor: 'test',
-      validate: async (v) => (typeof v === 'number' ? { value: v } : { issues: [{ message: 'must be a number' }] }),
+      validate: async (value) => (typeof value === 'number' ? { value } : { issues: [{ message: 'must be a number' }] }),
       jsonSchema: { input: () => ({ type: 'number' }), output: () => ({ type: 'number' }) },
     },
   };

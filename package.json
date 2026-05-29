@@ -16,6 +16,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "prepare": "tsc",
     "test": "npm run build && node --test",
     "patch": "npm test && npm version patch",
     "postversion": "npm run build && npm publish"

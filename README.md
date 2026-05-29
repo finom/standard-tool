@@ -51,22 +51,22 @@ import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/sp
 
 type CombinedSchema<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
 
-export interface StandardTool<Input, Output, ModelOutput = Output | { error: string }> {
+export interface StandardTool<Input, Output, FormattedOutput = Output | { error: string }> {
   name: string;
   description: string;
   inputSchema?: CombinedSchema<Input>;
   outputSchema?: CombinedSchema<Output>;
-  execute(input: Input): ModelOutput | Promise<ModelOutput>;
+  execute(input: Input): FormattedOutput | Promise<FormattedOutput>;
 }
 
-export function standardTool<Input, Output, ModelOutput = Output | { error: string }>(def: {
+export function standardTool<Input, Output, FormattedOutput = Output | { error: string }>(def: {
   name: string;
   description: string;
   inputSchema?: CombinedSchema<Input>;
   outputSchema?: CombinedSchema<Output>;
   execute: (input: Input) => Output | Promise<Output>;
-  formatOutput?: (result: Output | Error) => ModelOutput | Promise<ModelOutput>;
-}): StandardTool<Input, Output, ModelOutput> {
+  formatOutput?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>;
+}): StandardTool<Input, Output, FormattedOutput> {
   const check = async <T>(where: 'input' | 'output', s: CombinedSchema<T>, v: unknown): Promise<T> => {
     const r = await s['~standard'].validate(v);
     // a validation failure is a plain Error carrying the Standard Schema issues — no dedicated type:
@@ -75,7 +75,7 @@ export function standardTool<Input, Output, ModelOutput = Output | { error: stri
   };
   const formatOutput =
     def.formatOutput ??
-    ((result: Output | Error) => (result instanceof Error ? { error: result.message } : result) as unknown as ModelOutput);
+    ((result: Output | Error) => (result instanceof Error ? { error: result.message } : result) as unknown as FormattedOutput);
   return {
     name: def.name,
     description: def.description,
@@ -101,10 +101,10 @@ export function standardTool<Input, Output, ModelOutput = Output | { error: stri
 ```ts
 import { standardTool, type StandardTool, type FormatOutputFn } from 'standard-tool';
 
-standardTool(def): StandardTool<Input, Output, ModelOutput>;
+standardTool(def): StandardTool<Input, Output, FormattedOutput>;
 ```
 
-`Input`/`Output` are your **data types** (what your `execute` accepts and returns); the optional schemas describe them. `ModelOutput` is what the tool hands the model after formatting — `Output | { error: string }` by default.
+`Input`/`Output` are your **data types** (what your `execute` accepts and returns); the optional schemas describe them. `FormattedOutput` is what the tool hands the model after formatting — `Output | { error: string }` by default.
 
 | field | type | purpose |
 | --- | --- | --- |
@@ -113,12 +113,12 @@ standardTool(def): StandardTool<Input, Output, ModelOutput>;
 | `inputSchema?` | `CombinedSchema<Input>` | optional input schema — validates **and** emits JSON Schema |
 | `outputSchema?` | `CombinedSchema<Output>` | optional output schema — validates **and** emits JSON Schema |
 | `execute` (yours) | `(input: Input) => Output \| Promise<Output>` | your logic — receives validated input, returns the output |
-| `execute` (tool) | `(input: Input) => ModelOutput \| Promise<ModelOutput>` | validate in → run yours → validate out → format; errors become the output (no throw) **by default** |
-| `formatOutput?` | `(result: Output \| Error) => ModelOutput` | optional; maps the result — or an `Error` carrying `issues` — to the model output. Default `result instanceof Error ? { error: result.message } : result` |
+| `execute` (tool) | `(input: Input) => FormattedOutput \| Promise<FormattedOutput>` | validate in → run yours → validate out → format; errors become the output (no throw) **by default** |
+| `formatOutput?` | `(result: Output \| Error) => FormattedOutput` | optional; maps the result — or an `Error` carrying `issues` — to the model output. Default `result instanceof Error ? { error: result.message } : result` |
 
 `inputSchema`/`outputSchema` are optional; when present they must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`) — `Input`/`Output` are inferred from them (or from `execute` when a schema is omitted).
 
-`standardTool` is deliberately a **thin utility**: `name`, `description`, `inputSchema`, and `outputSchema` are returned **exactly as you passed them**. Only `execute` is wrapped — it validates input and output (when schemas are present), then routes the result, or any thrown error (a validation failure is a plain `Error` carrying `issues`), through `formatOutput`. `formatOutput` defaults to the `{ error }` envelope so bad data doesn't throw and a model loop keeps going; supply your own to reshape the output (its return type becomes the tool's `ModelOutput`) or to throw and surface the error. Note `formatOutput` is a **creation-time argument, not a field** on the returned tool — the shape stays the minimal `{ name, description, inputSchema?, outputSchema?, execute }`. That's the whole job.
+`standardTool` is deliberately a **thin utility**: `name`, `description`, `inputSchema`, and `outputSchema` are returned **exactly as you passed them**. Only `execute` is wrapped — it validates input and output (when schemas are present), then routes the result, or any thrown error (a validation failure is a plain `Error` carrying `issues`), through `formatOutput`. `formatOutput` defaults to the `{ error }` envelope so bad data doesn't throw and a model loop keeps going; supply your own to reshape the output (its return type becomes the tool's `FormattedOutput`) or to throw and surface the error. Note `formatOutput` is a **creation-time argument, not a field** on the returned tool — the shape stays the minimal `{ name, description, inputSchema?, outputSchema?, execute }`. That's the whole job.
 
 ## Usage
 

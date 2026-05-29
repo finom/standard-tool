@@ -42,7 +42,7 @@ const outputSchema = makeSchema<{ tempC: number }>(
 // type of `execute` (and reuse them in the runtime tests below).
 // ---------------------------------------------------------------------------
 
-// (1) default formatOutput, with schemas → ModelOutput = Output | { error }
+// (1) default formatOutput, with schemas → FormattedOutput = Output | { error }
 const weather = standardTool({
   name: 'get_weather',
   description: 'Current temperature for a city',
@@ -54,7 +54,7 @@ type _Weather = Expect<Equals<ExecOut<typeof weather>, { tempC: number } | { err
 weather satisfies StandardTool<{ city: string }, { tempC: number }>;
 weather satisfies StandardTool<{ city: string }, { tempC: number }, { tempC: number } | { error: string }>;
 
-// (2) default formatOutput, no schemas → Input/Output inferred from execute; ModelOutput = Output | { error }
+// (2) default formatOutput, no schemas → Input/Output inferred from execute; FormattedOutput = Output | { error }
 const echo = standardTool({
   name: 'echo',
   description: 'adds one',
@@ -63,7 +63,7 @@ const echo = standardTool({
 type _Echo = Expect<Equals<ExecOut<typeof echo>, { y: number } | { error: string }>>;
 echo satisfies StandardTool<{ x: number }, { y: number }>;
 
-// (3) sync custom formatOutput returning string → ModelOutput = string
+// (3) sync custom formatOutput returning string → FormattedOutput = string
 const stringFmt = standardTool({
   name: 'string_fmt',
   description: 'formats to a string',
@@ -75,7 +75,7 @@ const stringFmt = standardTool({
 type _StringFmt = Expect<Equals<ExecOut<typeof stringFmt>, string>>;
 stringFmt satisfies StandardTool<{ city: string }, { tempC: number }, string>;
 
-// (4) async custom formatOutput returning Promise<{ status }> → ModelOutput = { status } (awaited, not a Promise)
+// (4) async custom formatOutput returning Promise<{ status }> → FormattedOutput = { status } (awaited, not a Promise)
 const asyncFmt = standardTool({
   name: 'async_fmt',
   description: 'async formatter',
@@ -87,7 +87,7 @@ const asyncFmt = standardTool({
 type _AsyncAwaited = Expect<Equals<ExecOut<typeof asyncFmt>, { status: string }>>;
 type _AsyncRaw = Expect<Equals<ReturnType<typeof asyncFmt.execute>, { status: string } | Promise<{ status: string }>>>;
 
-// (5) passthrough formatOutput returning the raw result → ModelOutput = Output | Error
+// (5) passthrough formatOutput returning the raw result → FormattedOutput = Output | Error
 const passthrough = standardTool({
   name: 'passthrough',
   description: 'returns the raw result/error',
@@ -98,7 +98,7 @@ const passthrough = standardTool({
 });
 type _Passthrough = Expect<Equals<ExecOut<typeof passthrough>, { tempC: number } | Error>>;
 
-// (6) throwing formatOutput (escape hatch) → ModelOutput = Output
+// (6) throwing formatOutput (escape hatch) → FormattedOutput = Output
 const strict = standardTool({
   name: 'strict',
   description: 'throws on error',

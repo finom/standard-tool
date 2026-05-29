@@ -1,5 +1,7 @@
 # standard-tool
 
+[![npm](https://img.shields.io/npm/v/standard-tool)](https://www.npmjs.com/package/standard-tool) [![CI](https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/finom/standard-tool/actions/workflows/ci.yml)
+
 > A **standalone**, dependency-free convention for defining LLM tools — built on [Standard Schema](https://standardschema.dev) + [Standard JSON Schema](https://standardschema.dev/json-schema).
 
 `standard-tool` is one tiny function that gives an LLM tool a single, neutral shape: a `name`, a `description`, an `execute` function, and `inputSchema`/`outputSchema` that both **validate** their data (Standard Schema) and **emit JSON Schema** for the model (Standard JSON Schema). No framework, no runtime dependencies — copy-paste it or `npm i standard-tool`.
@@ -54,6 +56,9 @@ export class ToolValidationError extends Error {
     super(`${target} validation failed: ${issues.map((i) => i.message).join('; ')}`);
     this.name = 'ToolValidationError';
   }
+  toJSON() {
+    return { name: this.name, target: this.target, message: this.message, issues: this.issues };
+  }
 }
 
 export interface StandardTool<Input, Output> {
@@ -106,7 +111,9 @@ standardTool(def): StandardTool<Input, Output>;
 | `outputSchema` | `CombinedSchema<Output>` | output schema — validates **and** emits JSON Schema |
 | `execute` | `(input: Input) => Output \| Promise<Output>` | validate input → run your `execute` → validate output |
 
-`inputSchema`/`outputSchema` must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`) — `Input`/`Output` are inferred from them. Your `execute` receives the **validated** input and returns the output; the returned tool's `execute` re-validates both at runtime, throwing `ToolValidationError` on a mismatch.
+`inputSchema`/`outputSchema` must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`) — `Input`/`Output` are inferred from them.
+
+`standardTool` is deliberately a **thin utility**: the returned tool is your `def` with every field passed through **as-is** — `name`, `description`, `inputSchema`, and `outputSchema` are the exact values you handed in. Only `execute` is wrapped, so it's typed (`(input: Input) => Output`) and **validates input and output** at runtime, throwing `ToolValidationError` on a mismatch. That's the whole job.
 
 ## Usage
 

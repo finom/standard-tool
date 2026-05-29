@@ -1,6 +1,6 @@
-import type { CombinedSchema, StandardSchemaV1 } from './schema.js';
+import type { CombinedSchema, StandardSchemaV1 } from './standard-schema.js';
 
-export type * from './schema.js';
+export type * from './standard-schema.js';
 
 /** Thrown when input or output fails Standard Schema validation. */
 export class ToolValidationError extends Error {

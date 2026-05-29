@@ -54,7 +54,7 @@ export interface StandardTool<Input, Output, FormattedOutput = Output | { error:
   description: string;
   inputSchema?: CombinedSchema<Input>;
   outputSchema?: CombinedSchema<Output>;
-  execute(input: Input): FormattedOutput | Promise<FormattedOutput>;
+  execute(input: Input, meta?: any): FormattedOutput | Promise<FormattedOutput>;
 }
 
 export function standardTool<Input, Output, FormattedOutput = Output | { error: string }>(def: {
@@ -62,7 +62,7 @@ export function standardTool<Input, Output, FormattedOutput = Output | { error: 
   description: string;
   inputSchema?: CombinedSchema<Input>;
   outputSchema?: CombinedSchema<Output>;
-  execute: (input: Input) => Output | Promise<Output>;
+  execute: (input: Input, meta: any) => Output | Promise<Output>; // meta: optional per-call runtime context
   formatOutput?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>;
 }): StandardTool<Input, Output, FormattedOutput> {
   const check = async <T>(where: 'input' | 'output', s: CombinedSchema<T>, v: unknown): Promise<T> => {
@@ -79,11 +79,11 @@ export function standardTool<Input, Output, FormattedOutput = Output | { error: 
     description: def.description,
     inputSchema: def.inputSchema,
     outputSchema: def.outputSchema,
-    async execute(input) {
+    async execute(input, meta) {
       let result: Output | Error;
       try {
         const validInput = def.inputSchema ? await check('input', def.inputSchema, input) : input;
-        const output = await def.execute(validInput);
+        const output = await def.execute(validInput, meta);
         result = def.outputSchema ? await check('output', def.outputSchema, output) : output;
       } catch (e) {
         result = e instanceof Error ? e : new Error(String(e));
@@ -102,7 +102,7 @@ import { standardTool, type StandardTool, type FormatOutputFn } from 'standard-t
 standardTool(def): StandardTool<Input, Output, FormattedOutput>;
 ```
 
-`Input`/`Output` are your **data types** (what your `execute` accepts and returns); the optional schemas describe them. `FormattedOutput` is what the tool hands the model after formatting — `Output | { error: string }` by default.
+`Input`/`Output` are your **data types** (what your `execute` accepts and returns); the optional schemas describe them. `FormattedOutput` is what the tool hands the model after formatting — `Output | { error: string }` by default. `execute` also takes an optional second `meta` argument — per-call runtime context forwarded verbatim to your handler, never validated and never in the JSON Schema (see [Per-call runtime context](#per-call-runtime-context-meta)).
 
 | field | type | purpose |
 | --- | --- | --- |
@@ -110,8 +110,8 @@ standardTool(def): StandardTool<Input, Output, FormattedOutput>;
 | `description` | `string` | what the tool does |
 | `inputSchema?` | `CombinedSchema<Input>` | optional input schema — validates **and** emits JSON Schema |
 | `outputSchema?` | `CombinedSchema<Output>` | optional output schema — validates **and** emits JSON Schema |
-| `execute` (yours) | `(input: Input) => Output \| Promise<Output>` | your logic — receives validated input, returns the output |
-| `execute` (tool) | `(input: Input) => FormattedOutput \| Promise<FormattedOutput>` | validate in → run yours → validate out → format; errors become the output (no throw) **by default** |
+| `execute` (yours) | `(input: Input, meta: any) => Output \| Promise<Output>` | your logic — receives validated input and the optional per-call `meta`, returns the output |
+| `execute` (tool) | `(input: Input, meta?: any) => FormattedOutput \| Promise<FormattedOutput>` | validate in → run yours (forwarding `meta`) → validate out → format; errors become the output (no throw) **by default** |
 | `formatOutput?` | `(result: Output \| Error) => FormattedOutput` | optional; maps the result — or an `Error` carrying `issues` — to the model output. Default `result instanceof Error ? { error: result.message } : result` |
 
 `inputSchema`/`outputSchema` are optional; when present they must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`) — `Input`/`Output` are inferred from them (or from `execute` when a schema is omitted).
@@ -138,6 +138,25 @@ const out = await getWeather.execute({ city: 'Paris' }); // { tempC: number } | 
 // JSON Schema for the model (Standard JSON Schema), synchronous (inputSchema is optional, hence `!`):
 const parameters = getWeather.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
 ```
+
+## Per-call runtime context (`meta`)
+
+Tools often need per-call data that must **not** appear in the model-facing `inputSchema` — an auth token, a resolver, a request-scoped DB handle. `execute` takes an optional **second `meta` argument**, forwarded verbatim to your handler. It's never validated and never part of the JSON Schema, so your tools can stay **static** (defined once at module scope) while you inject context at call time — instead of closing over it in a per-render factory.
+
+`meta` is typed `any`; **annotate it on your handler** to type it at the call site:
+
+```ts
+const greet = standardTool({
+  name: 'greet',
+  description: 'Greet a person with per-call punctuation',
+  inputSchema: z.object({ name: z.string() }),
+  execute: ({ name }, meta: { punct: string }) => `hi ${name}${meta.punct}`, // annotate meta here
+});
+
+await greet.execute({ name: 'Ada' }, { punct: '!' }); // → 'hi Ada!'
+```
+
+Tools that don't need it just call `execute(input)` — `meta` is optional.
 
 ## Throwing instead of the `{ error }` envelope
 

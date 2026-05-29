@@ -93,6 +93,16 @@ const strict = standardTool({
 });
 expectType<Equals<ExecOut<typeof strict>, { tempC: number }>>();
 
+// (7) per-call `meta` — forwarded verbatim to the handler, which annotates its own type.
+// No outputSchema + default formatOutput → FormattedOutput = Output | { error }.
+const greet = standardTool({
+  name: 'greet',
+  description: 'greets with per-call punctuation',
+  inputSchema: z.object({ name: z.string() }),
+  execute: ({ name }, meta: { punct: string }) => `hi ${name}${meta.punct}`,
+});
+expectType<Equals<ExecOut<typeof greet>, string | { error: string }>>();
+
 // ---------------------------------------------------------------------------
 // Runtime behavior. Error assertions check standardTool's own prefix
 // (`input/output validation failed:`) and the Standard Schema issue `path`,
@@ -183,6 +193,11 @@ test('throwing formatOutput restores throwing (escape hatch)', async () => {
     () => Promise.resolve(strict.execute({ city: 123 } as unknown as { city: string })),
     /input validation failed:/
   );
+});
+
+test('forwards the per-call meta argument verbatim to the handler', async () => {
+  assert.equal(await greet.execute({ name: 'Ada' }, { punct: '!' }), 'hi Ada!');
+  assert.equal(await greet.execute({ name: 'Bob' }, { punct: '?' }), 'hi Bob?');
 });
 
 test('supports async validators', async () => {

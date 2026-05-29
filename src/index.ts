@@ -31,9 +31,11 @@ export interface StandardTool<Input, Output, FormattedOutput = DefaultFormattedO
    * Validate input (when `inputSchema`) → run your logic → validate output (when `outputSchema`) →
    * format. **By default it doesn't throw**: a validation failure or a thrown error becomes the
    * formatted output (`{ error: string }`) — unless your `formatOutput` throws — so a model loop
-   * keeps running.
+   * keeps running. `meta` is optional per-call runtime context (auth tokens, resolvers, request-scoped
+   * data) forwarded verbatim to your handler — never validated, never in the JSON Schema.
    */
-  execute(input: Input): FormattedOutput | Promise<FormattedOutput>;
+  // biome-ignore lint/suspicious/noExplicitAny: per-call runtime context, typed by the consumer's handler
+  execute(input: Input, meta?: any): FormattedOutput | Promise<FormattedOutput>;
 }
 
 /**
@@ -52,7 +54,8 @@ export function standardTool<Input, Output, FormattedOutput = DefaultFormattedOu
   description: string;
   inputSchema?: CombinedSchema<Input>;
   outputSchema?: CombinedSchema<Output>;
-  execute: (input: Input) => Output | Promise<Output>;
+  // biome-ignore lint/suspicious/noExplicitAny: per-call runtime context, typed by the consumer's handler
+  execute: (input: Input, meta: any) => Output | Promise<Output>;
   formatOutput?: FormatOutputFn<Output, FormattedOutput>;
 }): StandardTool<Input, Output, FormattedOutput> {
   const formatOutput: FormatOutputFn<Output, FormattedOutput> =
@@ -63,11 +66,11 @@ export function standardTool<Input, Output, FormattedOutput = DefaultFormattedOu
     description: def.description,
     inputSchema: def.inputSchema,
     outputSchema: def.outputSchema,
-    async execute(input) {
+    async execute(input, meta) {
       let result: Output | Error;
       try {
         const validInput = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
-        const output = await def.execute(validInput);
+        const output = await def.execute(validInput, meta);
         result = def.outputSchema ? await validate('output', def.outputSchema, output) : output;
       } catch (error) {
         result = error instanceof Error ? error : new Error(String(error));

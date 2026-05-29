@@ -49,7 +49,7 @@ import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/sp
 
 type CombinedSpec<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
 
-export interface StandardTool<Input, Output, FormattedOutput = Output | { error: string }> {
+export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output | { error: string }> {
   name: string;
   description: string;
   inputSchema?: CombinedSpec<Input>;
@@ -57,7 +57,7 @@ export interface StandardTool<Input, Output, FormattedOutput = Output | { error:
   execute(input: Input, meta?: any): FormattedOutput | Promise<FormattedOutput>;
 }
 
-export function standardTool<Input, Output, FormattedOutput = Output | { error: string }>(def: {
+export function standardTool<Input = unknown, Output = unknown, FormattedOutput = Output | { error: string }>(def: {
   name: string;
   description: string;
   inputSchema?: CombinedSpec<Input>;
@@ -189,7 +189,7 @@ import { standardTool, type StandardTool } from 'standard-tool';
 
 const client = new OpenAI();
 
-const tools: StandardTool<unknown, unknown>[] = [
+const tools: StandardTool[] = [
   standardTool({
     name: 'get_weather',
     description: 'Get the current temperature for a city',

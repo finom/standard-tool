@@ -200,6 +200,13 @@ test('forwards the per-call meta argument verbatim to the handler', async () => 
   assert.equal(await greet.execute({ name: 'Bob' }, { punct: '?' }), 'hi Bob?');
 });
 
+test('default generics: bare StandardTool needs no type args and holds heterogeneous tools', () => {
+  // Input/Output default to `unknown`, so `StandardTool[]` requires no args; execute is a
+  // method (bivariant), so specific tools assign in. This is the README OpenAI-loop case.
+  const toolArray: StandardTool[] = [weather, echo, stringFmt, greet];
+  assert.equal(toolArray.length, 4);
+});
+
 test('supports async validators', async () => {
   const finiteNumber = z.number().refine(async (n) => Number.isFinite(n), 'must be finite');
   const double = standardTool({

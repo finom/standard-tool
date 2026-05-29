@@ -40,6 +40,54 @@ npm i standard-tool
 npm i zod          # 4.2+   (or `arktype` 2.1.28+, or `valibot` + `@valibot/to-json-schema`)
 ```
 
+## Or just copy-paste it
+
+No dependency at all. Paste this and import the spec types from the official, types-only [`@standard-schema/spec`](https://github.com/standard-schema/standard-schema) (`npm i -D @standard-schema/spec`):
+
+```ts
+import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
+
+type CombinedSchema<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
+
+export class ToolValidationError extends Error {
+  constructor(readonly target: 'input' | 'output', readonly issues: readonly StandardSchemaV1.Issue[]) {
+    super(`${target} validation failed: ${issues.map((i) => i.message).join('; ')}`);
+    this.name = 'ToolValidationError';
+  }
+}
+
+export interface StandardTool<Input, Output> {
+  name: string;
+  description: string;
+  inputSchema: CombinedSchema<Input>;
+  outputSchema: CombinedSchema<Output>;
+  execute(input: Input): Output | Promise<Output>;
+}
+
+export function standardTool<Input, Output>(def: {
+  name: string;
+  description: string;
+  inputSchema: CombinedSchema<Input>;
+  outputSchema: CombinedSchema<Output>;
+  execute: (input: Input) => Output | Promise<Output>;
+}): StandardTool<Input, Output> {
+  const check = async <T>(t: 'input' | 'output', s: CombinedSchema<T>, v: unknown): Promise<T> => {
+    const r = await s['~standard'].validate(v);
+    if (r.issues) throw new ToolValidationError(t, r.issues);
+    return r.value;
+  };
+  return {
+    name: def.name,
+    description: def.description,
+    inputSchema: def.inputSchema,
+    outputSchema: def.outputSchema,
+    async execute(input) {
+      return check('output', def.outputSchema, await def.execute(await check('input', def.inputSchema, input)));
+    },
+  };
+}
+```
+
 ## API
 
 ```ts
@@ -48,17 +96,17 @@ import { standardTool, type StandardTool, ToolValidationError } from 'standard-t
 standardTool(def): StandardTool<Input, Output>;
 ```
 
-`def` and the returned `StandardTool` share these fields — nothing more:
+`def` and the returned `StandardTool<Input, Output>` share these fields — nothing more. `Input`/`Output` are your **data types** (what `execute` accepts and returns); the schemas describe them:
 
 | field | type | purpose |
 | --- | --- | --- |
 | `name` | `string` | tool name sent to the model |
 | `description` | `string` | what the tool does |
-| `inputSchema` | `Input` | input schema — validates **and** emits JSON Schema |
-| `outputSchema` | `Output` | output schema — validates **and** emits JSON Schema |
-| `execute` | `(input: InferInput<Input>) => InferOutput<Output>` | validate input → run your `execute` → validate output (returns a value or a `Promise`) |
+| `inputSchema` | `CombinedSchema<Input>` | input schema — validates **and** emits JSON Schema |
+| `outputSchema` | `CombinedSchema<Output>` | output schema — validates **and** emits JSON Schema |
+| `execute` | `(input: Input) => Output \| Promise<Output>` | validate input → run your `execute` → validate output |
 
-`Input`/`Output` must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`). Your `execute` receives the **validated** input and returns the output; the returned tool's `execute` is typed `(input: InferInput<Input>) => InferOutput<Output>` and validates both at runtime (throwing `ToolValidationError` on a mismatch).
+`inputSchema`/`outputSchema` must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`) — `Input`/`Output` are inferred from them. Your `execute` receives the **validated** input and returns the output; the returned tool's `execute` re-validates both at runtime, throwing `ToolValidationError` on a mismatch.
 
 ## Usage
 
@@ -83,91 +131,66 @@ const parameters = getWeather.inputSchema['~standard'].jsonSchema.input({ target
 
 ## With the OpenAI API
 
-Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). The tool's `parameters` come straight from Standard JSON Schema, and `execute` validates both the model's arguments and your result.
+Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). Because every tool is the same neutral shape, you keep them in one array: `.map` it into the request's `tools`, then dispatch each function call back to the matching tool by `name`. Adding a fourth tool is one more array entry — no special-casing, no per-tool wiring.
 
 ```ts
 import OpenAI from 'openai';
 import { z } from 'zod';
-import { standardTool } from 'standard-tool';
+import { standardTool, type StandardTool } from 'standard-tool';
 
 const client = new OpenAI();
 
-const getWeather = standardTool({
-  name: 'get_weather',
-  description: 'Get the current temperature for a city',
-  inputSchema: z.object({ city: z.string() }),
-  outputSchema: z.object({ tempC: z.number() }),
-  execute: async ({ city }) => ({ tempC: 21 }),
-});
+const tools: StandardTool<unknown, unknown>[] = [
+  standardTool({
+    name: 'get_weather',
+    description: 'Get the current temperature for a city',
+    inputSchema: z.object({ city: z.string() }),
+    outputSchema: z.object({ tempC: z.number() }),
+    execute: async ({ city }) => ({ tempC: 21 }),
+  }),
+  standardTool({
+    name: 'get_time',
+    description: 'Get the current time in an IANA timezone',
+    inputSchema: z.object({ timezone: z.string() }),
+    outputSchema: z.object({ iso: z.string() }),
+    execute: async ({ timezone }) => ({ iso: new Date().toLocaleString('en-US', { timeZone: timezone }) }),
+  }),
+  standardTool({
+    name: 'convert_currency',
+    description: 'Convert an amount between two currencies',
+    inputSchema: z.object({ amount: z.number(), from: z.string(), to: z.string() }),
+    outputSchema: z.object({ amount: z.number() }),
+    execute: async ({ amount }) => ({ amount: Math.round(amount * 1.08 * 100) / 100 }),
+  }),
+];
 
-const input: any[] = [{ role: 'user', content: 'What is the weather in Paris?' }];
+const input: OpenAI.Responses.ResponseInput = [{ role: 'user', content: 'What is the weather in Paris?' }];
 
 const res = await client.responses.create({
   model: 'gpt-5',
   input,
-  tools: [
-    {
-      type: 'function',
-      name: getWeather.name,
-      description: getWeather.description,
-      parameters: getWeather.inputSchema['~standard'].jsonSchema.input({ target: 'draft-2020-12' }),
-    },
-  ],
+  // ← the payoff: one shape, one mapping for every tool
+  tools: tools.map((tool): OpenAI.Responses.Tool => ({
+    type: 'function',
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.inputSchema['~standard'].jsonSchema.input({ target: 'draft-2020-12' }),
+    strict: false,
+  })),
 });
 
 input.push(...res.output);
 
 for (const item of res.output) {
-  if (item.type === 'function_call' && item.name === getWeather.name) {
-    const result = await getWeather.execute(JSON.parse(item.arguments)); // validates args + result
-    input.push({ type: 'function_call_output', call_id: item.call_id, output: JSON.stringify(result) });
-  }
+  if (item.type !== 'function_call') continue;
+  const tool = tools.find((t) => t.name === item.name);
+  if (!tool) continue;
+  const result = await tool.execute(JSON.parse(item.arguments)); // validates args + result
+  input.push({ type: 'function_call_output', call_id: item.call_id, output: JSON.stringify(result) });
 }
 
 const final = await client.responses.create({ model: 'gpt-5', input });
 console.log(final.output_text);
-```
-
-## Or just copy-paste it
-
-No dependency at all. Paste this and import the spec types from the official, types-only [`@standard-schema/spec`](https://github.com/standard-schema/standard-schema) (`npm i -D @standard-schema/spec`):
-
-```ts
-import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
-
-type CombinedSchema = StandardSchemaV1 & StandardJSONSchemaV1;
-
-export class ToolValidationError extends Error {
-  constructor(readonly target: 'input' | 'output', readonly issues: readonly StandardSchemaV1.Issue[]) {
-    super(`${target} validation failed: ${issues.map((i) => i.message).join('; ')}`);
-    this.name = 'ToolValidationError';
-  }
-}
-
-export function standardTool<Input extends CombinedSchema, Output extends CombinedSchema>(def: {
-  name: string;
-  description: string;
-  inputSchema: Input;
-  outputSchema: Output;
-  execute: (
-    input: StandardSchemaV1.InferOutput<Input>
-  ) => StandardSchemaV1.InferOutput<Output> | Promise<StandardSchemaV1.InferOutput<Output>>;
-}) {
-  const check = async <S extends StandardSchemaV1>(t: 'input' | 'output', s: S, v: unknown) => {
-    const r = await s['~standard'].validate(v);
-    if (r.issues) throw new ToolValidationError(t, r.issues);
-    return r.value as StandardSchemaV1.InferOutput<S>;
-  };
-  return {
-    name: def.name,
-    description: def.description,
-    inputSchema: def.inputSchema,
-    outputSchema: def.outputSchema,
-    async execute(input: StandardSchemaV1.InferInput<Input>): Promise<StandardSchemaV1.InferOutput<Output>> {
-      return check('output', def.outputSchema, await def.execute(await check('input', def.inputSchema, input)));
-    },
-  };
-}
 ```
 
 ## Links

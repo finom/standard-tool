@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { standardTool, type StandardTool, type CombinedSchema } from '../dist/index.js';
+import { z } from 'zod';
+import { standardTool, type StandardTool } from '../dist/index.js';
 
 // ---------------------------------------------------------------------------
 // Compile-time exact-type assertions, enforced by `npm run typecheck`
@@ -12,30 +13,10 @@ type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B 
 type ExecOut<T extends { execute: (input: never) => unknown }> = Awaited<ReturnType<T['execute']>>;
 const expectType = <_Pass extends true>(): void => {};
 
-// A minimal inline CombinedSchema (validate + jsonSchema), like Zod/ArkType/Valibot provide.
-const makeSchema = <T>(
-  check: (value: unknown) => string | null,
-  jsonIn: Record<string, unknown>
-): CombinedSchema<T> => ({
-  '~standard': {
-    version: 1,
-    vendor: 'test',
-    validate: (value) => {
-      const error = check(value);
-      return error ? { issues: [{ message: error }] } : { value: value as T };
-    },
-    jsonSchema: { input: () => jsonIn, output: () => ({}) },
-  },
-});
-
-const inputSchema = makeSchema<{ city: string }>(
-  (v) => (typeof (v as { city?: unknown })?.city === 'string' ? null : 'city must be a string'),
-  { type: 'object', properties: { city: { type: 'string' } }, required: ['city'], additionalProperties: false }
-);
-const outputSchema = makeSchema<{ tempC: number }>(
-  (v) => (typeof (v as { tempC?: unknown })?.tempC === 'number' ? null : 'tempC must be a number'),
-  {}
-);
+// Real Zod schemas — Zod 4.2+ implements both Standard Schema (validation) and
+// Standard JSON Schema (`~standard.jsonSchema`), so it plugs into standardTool as-is.
+const inputSchema = z.object({ city: z.string() });
+const outputSchema = z.object({ tempC: z.number() });
 
 // ---------------------------------------------------------------------------
 // Tools at module scope, one per `formatOutput` variant, so we can assert the
@@ -113,7 +94,9 @@ const strict = standardTool({
 expectType<Equals<ExecOut<typeof strict>, { tempC: number }>>();
 
 // ---------------------------------------------------------------------------
-// Runtime behavior
+// Runtime behavior. Error assertions check standardTool's own prefix
+// (`input/output validation failed:`) and the Standard Schema issue `path`,
+// not Zod's exact wording — robust across Zod versions.
 // ---------------------------------------------------------------------------
 
 test('exposes exactly name, description, inputSchema, outputSchema, execute (no formatOutput member)', () => {
@@ -125,17 +108,17 @@ test('default formatOutput returns the validated value on success', async () => 
 });
 
 test('exposes JSON Schema via Standard JSON Schema', () => {
-  const { inputSchema } = weather;
-  assert.ok(inputSchema); // optional on the type; present here
-  const schema = inputSchema['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
-  assert.equal(schema.type, 'object');
-  assert.deepEqual(schema.required, ['city']);
+  const { inputSchema: schema } = weather;
+  assert.ok(schema); // optional on the type; present here
+  const json = schema['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
+  assert.equal(json.type, 'object');
+  assert.deepEqual(json.required, ['city']);
 });
 
 test('default formatOutput: invalid input → { error } envelope (no throw)', async () => {
-  assert.deepEqual(await weather.execute({ city: 123 } as unknown as { city: string }), {
-    error: 'input validation failed: city must be a string',
-  });
+  const out = await weather.execute({ city: 123 } as unknown as { city: string });
+  assert.deepEqual(Object.keys(out), ['error']);
+  assert.match((out as { error: string }).error, /^input validation failed:/);
 });
 
 test('default formatOutput: invalid output → { error } envelope (no throw)', async () => {
@@ -146,7 +129,9 @@ test('default formatOutput: invalid output → { error } envelope (no throw)', a
     outputSchema,
     execute: async () => ({ tempC: 'hot' }) as unknown as { tempC: number },
   });
-  assert.deepEqual(await bad.execute({ city: 'Paris' }), { error: 'output validation failed: tempC must be a number' });
+  const out = await bad.execute({ city: 'Paris' });
+  assert.deepEqual(Object.keys(out), ['error']);
+  assert.match((out as { error: string }).error, /^output validation failed:/);
 });
 
 test('default formatOutput: errors thrown in execute → { error } envelope', async () => {
@@ -170,51 +155,43 @@ test('optional schemas: validation skipped when omitted', async () => {
 
 test('sync custom formatOutput reshapes the result', async () => {
   assert.equal(await stringFmt.execute({ city: 'Paris' }), 'ok: 9');
-  assert.equal(
+  assert.match(
     await stringFmt.execute({ city: 123 } as unknown as { city: string }),
-    'error: input validation failed: city must be a string'
+    /^error: input validation failed:/
   );
 });
 
 test('async custom formatOutput is awaited', async () => {
   assert.deepEqual(await asyncFmt.execute({ city: 'Paris' }), { status: 'ok' });
-  assert.deepEqual(await asyncFmt.execute({ city: 123 } as unknown as { city: string }), {
-    status: 'input validation failed: city must be a string',
-  });
+  const out = await asyncFmt.execute({ city: 123 } as unknown as { city: string });
+  assert.match(out.status, /^input validation failed:/);
 });
 
 test('passthrough formatOutput exposes the raw Error carrying issues', async () => {
   assert.deepEqual(await passthrough.execute({ city: 'Paris' }), { tempC: 1 });
   const err = await passthrough.execute({ city: 123 } as unknown as { city: string });
   assert.ok(err instanceof Error);
-  assert.match(err.message, /city must be a string/);
-  const issues = (err as Error & { issues: { message: string }[] }).issues;
-  assert.equal(issues[0].message, 'city must be a string');
+  assert.match(err.message, /^input validation failed:/);
+  const issues = (err as Error & { issues: { path?: PropertyKey[] }[] }).issues;
+  assert.ok(Array.isArray(issues) && issues.length > 0);
+  assert.deepEqual(issues[0].path, ['city']);
 });
 
 test('throwing formatOutput restores throwing (escape hatch)', async () => {
   assert.deepEqual(await strict.execute({ city: 'Paris' }), { tempC: 1 });
   await assert.rejects(
     () => Promise.resolve(strict.execute({ city: 123 } as unknown as { city: string })),
-    /city must be a string/
+    /input validation failed:/
   );
 });
 
 test('supports async validators', async () => {
-  const num: CombinedSchema<number> = {
-    '~standard': {
-      version: 1,
-      vendor: 'test',
-      validate: async (value) =>
-        typeof value === 'number' ? { value } : { issues: [{ message: 'must be a number' }] },
-      jsonSchema: { input: () => ({ type: 'number' }), output: () => ({ type: 'number' }) },
-    },
-  };
+  const finiteNumber = z.number().refine(async (n) => Number.isFinite(n), 'must be finite');
   const double = standardTool({
     name: 'double',
     description: 'doubles a number',
-    inputSchema: num,
-    outputSchema: num,
+    inputSchema: finiteNumber,
+    outputSchema: finiteNumber,
     execute: async (n) => n * 2,
   });
   expectType<Equals<ExecOut<typeof double>, number | { error: string }>>();

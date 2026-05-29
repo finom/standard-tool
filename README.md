@@ -1,5 +1,4 @@
-# standard-tool
-[![npm](https://img.shields.io/npm/v/standard-tool)](https://www.npmjs.com/package/standard-tool) [![CI](https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/finom/standard-tool/actions/workflows/ci.yml)
+# standard-tool &nbsp;[![npm](https://img.shields.io/npm/v/standard-tool)](https://www.npmjs.com/package/standard-tool) [![CI](https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/finom/standard-tool/actions/workflows/ci.yml)
 
 > A **standalone**, dependency-free convention for defining LLM tools — built on [Standard Schema](https://standardschema.dev) + [Standard JSON Schema](https://standardschema.dev/json-schema).
 
@@ -138,6 +137,26 @@ const out = await getWeather.execute({ city: 'Paris' }); // { tempC: number } | 
 
 // JSON Schema for the model (Standard JSON Schema), synchronous (inputSchema is optional, hence `!`):
 const parameters = getWeather.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
+```
+
+## Throwing instead of the `{ error }` envelope
+
+By default a validation failure or a thrown error comes back as `{ error: string }`, so a model loop can keep running. When you'd rather have `execute` **throw** — e.g. to let a caller's `try/catch` handle failures — re-throw the `Error` from `formatOutput`:
+
+```ts
+const getWeather = standardTool({
+  name: 'get_weather',
+  description: 'Current temperature for a city',
+  inputSchema: z.object({ city: z.string() }),
+  outputSchema: z.object({ tempC: z.number() }),
+  execute: async ({ city }) => ({ tempC: 21 }),
+  formatOutput: (result) => {
+    if (result instanceof Error) throw result; // validation/exec failures now reject
+    return result;
+  },
+});
+
+await getWeather.execute({ city: 'Paris' }); // { tempC: number } — rejects on bad input/output
 ```
 
 ## With the OpenAI API

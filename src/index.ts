@@ -14,21 +14,20 @@ export class ToolValidationError extends Error {
 }
 
 /**
- * A standard, DRY LLM tool: `name` + `description` + validated input/output + `execute`.
- * `execute` maps the input schema's input type to the output schema's output type
- * (`execute(input: InferInput<Input>): InferOutput<Output>`), validating both at runtime.
+ * A standard, DRY LLM tool over its **data** types `Input`/`Output`: `name` + `description` +
+ * Standard-Schema/JSON-Schema `inputSchema`/`outputSchema` + `execute(input: Input): Output`,
+ * validating both at runtime. `Input`/`Output` are the data the tool accepts and returns; the
+ * schemas describe them.
  */
-export interface StandardTool<Input extends CombinedSchema, Output extends CombinedSchema> {
+export interface StandardTool<Input, Output> {
   name: string;
   description: string;
-  /** Standard Schema + Standard JSON Schema for the input. */
-  inputSchema: Input;
-  /** Standard Schema + Standard JSON Schema for the output. */
-  outputSchema: Output;
+  /** Standard Schema + Standard JSON Schema describing the input data. */
+  inputSchema: CombinedSchema<Input>;
+  /** Standard Schema + Standard JSON Schema describing the output data. */
+  outputSchema: CombinedSchema<Output>;
   /** Validate input → run → validate output. Throws {@link ToolValidationError} on failure. */
-  execute(
-    input: StandardSchemaV1.InferInput<Input>
-  ): StandardSchemaV1.InferOutput<Output> | Promise<StandardSchemaV1.InferOutput<Output>>;
+  execute(input: Input): Output | Promise<Output>;
 }
 
 /**
@@ -39,14 +38,12 @@ export interface StandardTool<Input extends CombinedSchema, Output extends Combi
  * Your `execute` receives the validated input and returns the output; the returned tool's
  * `execute` validates input, runs yours, then validates the result.
  */
-export function standardTool<Input extends CombinedSchema, Output extends CombinedSchema>(def: {
+export function standardTool<Input, Output>(def: {
   name: string;
   description: string;
-  inputSchema: Input;
-  outputSchema: Output;
-  execute: (
-    input: StandardSchemaV1.InferOutput<Input>
-  ) => StandardSchemaV1.InferOutput<Output> | Promise<StandardSchemaV1.InferOutput<Output>>;
+  inputSchema: CombinedSchema<Input>;
+  outputSchema: CombinedSchema<Output>;
+  execute: (input: Input) => Output | Promise<Output>;
 }): StandardTool<Input, Output> {
   return {
     name: def.name,

@@ -26,8 +26,8 @@ await getWeather.execute({ city: 'Paris' }); // → { tempC: number } | { error:
 ## What it is
 
 - **Standalone & dependency-free.** A single, small function. The Standard Schema and Standard JSON Schema interfaces are vendored into the package, so installing it pulls in nothing else — and you can just copy the source into your project instead (see [below](#or-just-copy-paste-it)).
-- **A convention, not a framework.** It doesn't run your agent, call your model, or own your runtime. It defines only the shape — `{ name, description, inputSchema, outputSchema, execute, toModelOutput }` — and the things every tool needs: validation, a JSON Schema, and a model-facing result.
-- **Validates input _and_ output — without throwing.** `execute` accepts untrusted input (e.g. JSON arguments from a model), validates it via Standard Schema, runs your logic, then validates the result. A validation failure or a thrown error doesn't crash your loop — it comes back as `{ error: string }` (customize via `toModelOutput`), so the model always gets a value.
+- **A convention, not a framework.** It doesn't run your agent, call your model, or own your runtime. It defines only the shape — `{ name, description, inputSchema?, outputSchema?, execute }` — and the things every tool needs: validation, a JSON Schema, and a model-facing result.
+- **Validates input _and_ output — without throwing.** `execute` accepts untrusted input (e.g. JSON arguments from a model), validates it via Standard Schema (when you provide a schema — both are optional), runs your logic, then validates the result. A validation failure or a thrown error doesn't crash your loop — it comes back as `{ error: string }` (customize via `formatOutput`), so the model always gets a value.
 - **Emits JSON Schema for any model.** Because the schemas implement Standard JSON Schema, you get an OpenAI- or MCP-ready JSON Schema (any function-calling model) synchronously via `inputSchema['~standard'].jsonSchema.input(...)`.
 
 ## Why
@@ -50,57 +50,47 @@ No dependency at all. Paste this and import the spec types from the official, ty
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 
 type CombinedSchema<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
-type DefaultModelOutput<Output> = Output | { error: string };
 
-export class ToolValidationError extends Error {
-  constructor(readonly target: 'input' | 'output', readonly issues: readonly StandardSchemaV1.Issue[]) {
-    super(`${target} validation failed: ${issues.map((i) => i.message).join('; ')}`);
-    this.name = 'ToolValidationError';
-  }
-  toJSON() {
-    return { name: this.name, target: this.target, message: this.message, issues: this.issues };
-  }
-}
-
-export interface StandardTool<Input, Output, ModelOutput = DefaultModelOutput<Output>> {
+export interface StandardTool<Input, Output, ModelOutput = Output | { error: string }> {
   name: string;
   description: string;
-  inputSchema: CombinedSchema<Input>;
-  outputSchema: CombinedSchema<Output>;
+  inputSchema?: CombinedSchema<Input>;
+  outputSchema?: CombinedSchema<Output>;
   execute(input: Input): ModelOutput | Promise<ModelOutput>;
-  toModelOutput(result: Output | Error): ModelOutput | Promise<ModelOutput>;
 }
 
-export function standardTool<Input, Output, ModelOutput = DefaultModelOutput<Output>>(def: {
+export function standardTool<Input, Output, ModelOutput = Output | { error: string }>(def: {
   name: string;
   description: string;
-  inputSchema: CombinedSchema<Input>;
-  outputSchema: CombinedSchema<Output>;
+  inputSchema?: CombinedSchema<Input>;
+  outputSchema?: CombinedSchema<Output>;
   execute: (input: Input) => Output | Promise<Output>;
-  toModelOutput?: (result: Output | Error) => ModelOutput | Promise<ModelOutput>;
+  formatOutput?: (result: Output | Error) => ModelOutput | Promise<ModelOutput>;
 }): StandardTool<Input, Output, ModelOutput> {
-  const check = async <T>(t: 'input' | 'output', s: CombinedSchema<T>, v: unknown): Promise<T> => {
+  const check = async <T>(where: 'input' | 'output', s: CombinedSchema<T>, v: unknown): Promise<T> => {
     const r = await s['~standard'].validate(v);
-    if (r.issues) throw new ToolValidationError(t, r.issues);
+    // a validation failure is a plain Error carrying the Standard Schema issues — no dedicated type:
+    if (r.issues) throw Object.assign(new Error(`${where} validation failed`), { issues: r.issues });
     return r.value;
   };
-  const toModelOutput =
-    def.toModelOutput ??
+  const formatOutput =
+    def.formatOutput ??
     ((result: Output | Error) => (result instanceof Error ? { error: result.message } : result) as unknown as ModelOutput);
   return {
     name: def.name,
     description: def.description,
     inputSchema: def.inputSchema,
     outputSchema: def.outputSchema,
-    toModelOutput,
     async execute(input) {
       let result: Output | Error;
       try {
-        result = await check('output', def.outputSchema, await def.execute(await check('input', def.inputSchema, input)));
+        const validInput = def.inputSchema ? await check('input', def.inputSchema, input) : input;
+        const output = await def.execute(validInput);
+        result = def.outputSchema ? await check('output', def.outputSchema, output) : output;
       } catch (e) {
         result = e instanceof Error ? e : new Error(String(e));
       }
-      return toModelOutput(result);
+      return formatOutput(result);
     },
   };
 }
@@ -109,31 +99,31 @@ export function standardTool<Input, Output, ModelOutput = DefaultModelOutput<Out
 ## API
 
 ```ts
-import { standardTool, type StandardTool, type ToModelOutputFn, ToolValidationError } from 'standard-tool';
+import { standardTool, type StandardTool, type FormatOutputFn } from 'standard-tool';
 
 standardTool(def): StandardTool<Input, Output, ModelOutput>;
 ```
 
-`Input`/`Output` are your **data types** (what your `execute` accepts and returns); the schemas describe them. `ModelOutput` is what the tool hands the model after formatting — `Output | { error: string }` by default.
+`Input`/`Output` are your **data types** (what your `execute` accepts and returns); the optional schemas describe them. `ModelOutput` is what the tool hands the model after formatting — `Output | { error: string }` by default.
 
 | field | type | purpose |
 | --- | --- | --- |
 | `name` | `string` | tool name sent to the model |
 | `description` | `string` | what the tool does |
-| `inputSchema` | `CombinedSchema<Input>` | input schema — validates **and** emits JSON Schema |
-| `outputSchema` | `CombinedSchema<Output>` | output schema — validates **and** emits JSON Schema |
+| `inputSchema?` | `CombinedSchema<Input>` | optional input schema — validates **and** emits JSON Schema |
+| `outputSchema?` | `CombinedSchema<Output>` | optional output schema — validates **and** emits JSON Schema |
 | `execute` (yours) | `(input: Input) => Output \| Promise<Output>` | your logic — receives validated input, returns the output |
 | `execute` (tool) | `(input: Input) => ModelOutput \| Promise<ModelOutput>` | validate in → run yours → validate out → format; **never throws by default** |
-| `toModelOutput?` | `(result: Output \| Error) => ModelOutput` | optional formatter; default `result instanceof Error ? { error: result.message } : result` |
+| `formatOutput?` | `(result: Output \| Error) => ModelOutput` | optional; maps the result — or an `Error` carrying `issues` — to the model output. Default `result instanceof Error ? { error: result.message } : result` |
 
-`inputSchema`/`outputSchema` must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`) — `Input`/`Output` are inferred from them.
+`inputSchema`/`outputSchema` are optional; when present they must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`) — `Input`/`Output` are inferred from them (or from `execute` when a schema is omitted).
 
-`standardTool` is deliberately a **thin utility**: `name`, `description`, `inputSchema`, and `outputSchema` are returned **exactly as you passed them**. Only two things are added — `execute` is wrapped so it validates input and output and routes the result (or any error) through `toModelOutput`, and `toModelOutput` defaults to the `{ error }` envelope when you don't supply one. So bad data — or a thrown error — comes back as `{ error: string }` instead of throwing, keeping a model loop alive; pass your own `toModelOutput` to reshape the output (its return type becomes the tool's output), or to re-throw and restore throwing. That's the whole job.
+`standardTool` is deliberately a **thin utility**: `name`, `description`, `inputSchema`, and `outputSchema` are returned **exactly as you passed them**. Only `execute` is wrapped — it validates input and output (when schemas are present), then routes the result, or any thrown error (a validation failure is a plain `Error` carrying `issues`), through `formatOutput`. `formatOutput` defaults to the `{ error }` envelope so bad data doesn't throw and a model loop keeps going; supply your own to reshape the output (its return type becomes the tool's `ModelOutput`) or to throw and surface the error. Note `formatOutput` is a **creation-time argument, not a field** on the returned tool — the shape stays the minimal `{ name, description, inputSchema?, outputSchema?, execute }`. That's the whole job.
 
 ## Usage
 
 ```ts
-import { standardTool, ToolValidationError } from 'standard-tool';
+import { standardTool } from 'standard-tool';
 import { z } from 'zod';
 
 const getWeather = standardTool({
@@ -147,8 +137,8 @@ const getWeather = standardTool({
 // validated end to end — bad input or output comes back as { error: string }, never a throw:
 const out = await getWeather.execute({ city: 'Paris' }); // { tempC: number } | { error: string }
 
-// JSON Schema for the model (Standard JSON Schema), synchronous:
-const parameters = getWeather.inputSchema['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
+// JSON Schema for the model (Standard JSON Schema), synchronous (inputSchema is optional, hence `!`):
+const parameters = getWeather.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
 ```
 
 ## With the OpenAI API
@@ -196,7 +186,7 @@ const res = await client.responses.create({
     type: 'function',
     name: tool.name,
     description: tool.description,
-    parameters: tool.inputSchema['~standard'].jsonSchema.input({ target: 'draft-2020-12' }),
+    parameters: tool.inputSchema ? tool.inputSchema['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) : {},
     strict: false,
   })),
 });

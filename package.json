@@ -22,7 +22,7 @@
     "lint:fix": "biome check --write",
     "test": "npm run build && npm run typecheck && npm run lint && node --test",
     "patch": "npm test && npm version patch",
-    "postversion": "npm run build && npm publish"
+    "postversion": "npm run build && npm publish && git push && git push --tags"
   },
   "keywords": [
     "standard-schema",

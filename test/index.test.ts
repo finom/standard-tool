@@ -2,6 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { standardTool, type StandardTool, type CombinedSchema } from '../dist/index.js';
 
+// ---------------------------------------------------------------------------
+// Compile-time exact-type assertions. These are erased at runtime; they are
+// enforced by `npm run typecheck` (tsconfig.test.json), which CI runs via
+// `npm test`. A wrong type makes `Expect<false>` fail to compile.
+// `ExecOut<T>` is what `await tool.execute(...)` yields — the 3rd generic.
+// ---------------------------------------------------------------------------
+type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type Expect<T extends true> = T;
+type ExecOut<T extends { execute: (input: never) => unknown }> = Awaited<ReturnType<T['execute']>>;
+
 // A minimal inline CombinedSchema (validate + jsonSchema), like Zod/ArkType/Valibot provide.
 const makeSchema = <T>(
   check: (value: unknown) => string | null,
@@ -27,6 +37,12 @@ const outputSchema = makeSchema<{ tempC: number }>(
   {}
 );
 
+// ---------------------------------------------------------------------------
+// Tools at module scope, one per `formatOutput` variant, so we can assert the
+// type of `execute` (and reuse them in the runtime tests below).
+// ---------------------------------------------------------------------------
+
+// (1) default formatOutput, with schemas → ModelOutput = Output | { error }
 const weather = standardTool({
   name: 'get_weather',
   description: 'Current temperature for a city',
@@ -34,19 +50,77 @@ const weather = standardTool({
   outputSchema,
   execute: async ({ city }) => ({ tempC: 21 }),
 });
-
-// the returned tool conforms to the exported StandardTool type (data types, not schema types).
-// Without a custom formatOutput, the model-facing output is the default `{ tempC } | { error }`:
+type _Weather = Expect<Equals<ExecOut<typeof weather>, { tempC: number } | { error: string }>>;
 weather satisfies StandardTool<{ city: string }, { tempC: number }>;
 weather satisfies StandardTool<{ city: string }, { tempC: number }, { tempC: number } | { error: string }>;
 
-test('exposes exactly name, description, inputSchema, outputSchema, execute', () => {
+// (2) default formatOutput, no schemas → Input/Output inferred from execute; ModelOutput = Output | { error }
+const echo = standardTool({
+  name: 'echo',
+  description: 'adds one',
+  execute: (input: { x: number }) => ({ y: input.x + 1 }),
+});
+type _Echo = Expect<Equals<ExecOut<typeof echo>, { y: number } | { error: string }>>;
+echo satisfies StandardTool<{ x: number }, { y: number }>;
+
+// (3) sync custom formatOutput returning string → ModelOutput = string
+const stringFmt = standardTool({
+  name: 'string_fmt',
+  description: 'formats to a string',
+  inputSchema,
+  outputSchema,
+  formatOutput: (result) => (result instanceof Error ? `error: ${result.message}` : `ok: ${result.tempC}`),
+  execute: async () => ({ tempC: 9 }),
+});
+type _StringFmt = Expect<Equals<ExecOut<typeof stringFmt>, string>>;
+stringFmt satisfies StandardTool<{ city: string }, { tempC: number }, string>;
+
+// (4) async custom formatOutput returning Promise<{ status }> → ModelOutput = { status } (awaited, not a Promise)
+const asyncFmt = standardTool({
+  name: 'async_fmt',
+  description: 'async formatter',
+  inputSchema,
+  outputSchema,
+  formatOutput: async (result) => ({ status: result instanceof Error ? result.message : 'ok' }),
+  execute: async () => ({ tempC: 5 }),
+});
+type _AsyncAwaited = Expect<Equals<ExecOut<typeof asyncFmt>, { status: string }>>;
+type _AsyncRaw = Expect<Equals<ReturnType<typeof asyncFmt.execute>, { status: string } | Promise<{ status: string }>>>;
+
+// (5) passthrough formatOutput returning the raw result → ModelOutput = Output | Error
+const passthrough = standardTool({
+  name: 'passthrough',
+  description: 'returns the raw result/error',
+  inputSchema,
+  outputSchema,
+  formatOutput: (result) => result,
+  execute: async () => ({ tempC: 1 }),
+});
+type _Passthrough = Expect<Equals<ExecOut<typeof passthrough>, { tempC: number } | Error>>;
+
+// (6) throwing formatOutput (escape hatch) → ModelOutput = Output
+const strict = standardTool({
+  name: 'strict',
+  description: 'throws on error',
+  inputSchema,
+  outputSchema,
+  formatOutput: (result) => {
+    if (result instanceof Error) throw result;
+    return result;
+  },
+  execute: async () => ({ tempC: 1 }),
+});
+type _Strict = Expect<Equals<ExecOut<typeof strict>, { tempC: number }>>;
+
+// ---------------------------------------------------------------------------
+// Runtime behavior
+// ---------------------------------------------------------------------------
+
+test('exposes exactly name, description, inputSchema, outputSchema, execute (no formatOutput member)', () => {
   assert.deepEqual(Object.keys(weather).sort(), ['description', 'execute', 'inputSchema', 'name', 'outputSchema']);
-  assert.equal(weather.name, 'get_weather');
-  assert.equal(weather.description, 'Current temperature for a city');
 });
 
-test('validates input and output, returning the validated value on success', async () => {
+test('default formatOutput returns the validated value on success', async () => {
   assert.deepEqual(await weather.execute({ city: 'Paris' }), { tempC: 21 });
 });
 
@@ -56,15 +130,16 @@ test('exposes JSON Schema via Standard JSON Schema', () => {
   assert.deepEqual(schema.required, ['city']);
 });
 
-test('does NOT throw on invalid input — returns the default { error } envelope', async () => {
-  const result = await weather.execute({ city: 123 } as unknown as { city: string });
-  assert.deepEqual(result, { error: 'input validation failed: city must be a string' });
+test('default formatOutput: invalid input → { error } envelope (no throw)', async () => {
+  assert.deepEqual(await weather.execute({ city: 123 } as unknown as { city: string }), {
+    error: 'input validation failed: city must be a string',
+  });
 });
 
-test('does NOT throw on invalid output — returns the default { error } envelope', async () => {
+test('default formatOutput: invalid output → { error } envelope (no throw)', async () => {
   const bad = standardTool({
     name: 'bad',
-    description: 'returns a wrong shape',
+    description: 'wrong shape',
     inputSchema,
     outputSchema,
     execute: async () => ({ tempC: 'hot' }) as unknown as { tempC: number },
@@ -72,7 +147,7 @@ test('does NOT throw on invalid output — returns the default { error } envelop
   assert.deepEqual(await bad.execute({ city: 'Paris' }), { error: 'output validation failed: tempC must be a number' });
 });
 
-test('catches errors thrown inside execute and returns the { error } envelope', async () => {
+test('default formatOutput: errors thrown in execute → { error } envelope', async () => {
   const boom = standardTool({
     name: 'boom',
     description: 'throws',
@@ -85,68 +160,42 @@ test('catches errors thrown inside execute and returns the { error } envelope', 
   assert.deepEqual(await boom.execute({ city: 'Paris' }), { error: 'kaboom' });
 });
 
-test('inputSchema and outputSchema are optional — when omitted, validation is skipped', async () => {
-  const echo = standardTool({
-    name: 'echo',
-    description: 'adds one',
-    execute: (input: { x: number }) => ({ y: input.x + 1 }),
-  });
-  echo satisfies StandardTool<{ x: number }, { y: number }>;
+test('optional schemas: validation skipped when omitted', async () => {
   assert.equal(echo.inputSchema, undefined);
   assert.equal(echo.outputSchema, undefined);
   assert.deepEqual(await echo.execute({ x: 1 }), { y: 2 });
 });
 
-test('custom formatOutput reshapes the result (its return type is the tool output)', async () => {
-  const tool = standardTool({
-    name: 'custom',
-    description: 'custom formatter',
-    inputSchema,
-    outputSchema,
-    formatOutput: (result) => (result instanceof Error ? `error: ${result.message}` : `ok: ${result.tempC}`),
-    execute: async () => ({ tempC: 9 }),
-  });
-  tool satisfies StandardTool<{ city: string }, { tempC: number }, string>;
-  assert.equal(await tool.execute({ city: 'Paris' }), 'ok: 9');
+test('sync custom formatOutput reshapes the result', async () => {
+  assert.equal(await stringFmt.execute({ city: 'Paris' }), 'ok: 9');
   assert.equal(
-    await tool.execute({ city: 123 } as unknown as { city: string }),
+    await stringFmt.execute({ city: 123 } as unknown as { city: string }),
     'error: input validation failed: city must be a string'
   );
 });
 
-test('a throwing formatOutput restores throwing behavior (the escape hatch)', async () => {
-  const tool = standardTool({
-    name: 'strict',
-    description: 'throws on error',
-    inputSchema,
-    outputSchema,
-    formatOutput: (result) => {
-      if (result instanceof Error) throw result;
-      return result;
-    },
-    execute: async () => ({ tempC: 1 }),
+test('async custom formatOutput is awaited', async () => {
+  assert.deepEqual(await asyncFmt.execute({ city: 'Paris' }), { status: 'ok' });
+  assert.deepEqual(await asyncFmt.execute({ city: 123 } as unknown as { city: string }), {
+    status: 'input validation failed: city must be a string',
   });
-  await assert.rejects(
-    () => Promise.resolve(tool.execute({ city: 123 } as unknown as { city: string })),
-    /city must be a string/
-  );
 });
 
-test('validation failures are plain Errors carrying an issues array (no dedicated error type)', async () => {
-  const tool = standardTool({
-    name: 'raw',
-    description: 'returns the raw error',
-    inputSchema,
-    outputSchema,
-    formatOutput: (result) => result, // pass through so we can inspect the Error
-    execute: async () => ({ tempC: 1 }),
-  });
-  const result = await tool.execute({ city: 123 } as unknown as { city: string });
-  assert.ok(result instanceof Error);
-  assert.match(result.message, /city must be a string/);
-  const issues = (result as Error & { issues: { message: string }[] }).issues;
-  assert.ok(Array.isArray(issues));
+test('passthrough formatOutput exposes the raw Error carrying issues', async () => {
+  assert.deepEqual(await passthrough.execute({ city: 'Paris' }), { tempC: 1 });
+  const err = await passthrough.execute({ city: 123 } as unknown as { city: string });
+  assert.ok(err instanceof Error);
+  assert.match(err.message, /city must be a string/);
+  const issues = (err as Error & { issues: { message: string }[] }).issues;
   assert.equal(issues[0].message, 'city must be a string');
+});
+
+test('throwing formatOutput restores throwing (escape hatch)', async () => {
+  assert.deepEqual(await strict.execute({ city: 'Paris' }), { tempC: 1 });
+  await assert.rejects(
+    () => Promise.resolve(strict.execute({ city: 123 } as unknown as { city: string })),
+    /city must be a string/
+  );
 });
 
 test('supports async validators', async () => {
@@ -165,5 +214,6 @@ test('supports async validators', async () => {
     outputSchema: num,
     execute: async (n) => n * 2,
   });
+  type _Double = Expect<Equals<ExecOut<typeof double>, number | { error: string }>>;
   assert.equal(await double.execute(21), 42);
 });

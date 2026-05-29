@@ -27,8 +27,9 @@ export interface StandardTool<Input, Output, ModelOutput = DefaultModelOutput<Ou
   outputSchema?: CombinedSchema<Output>;
   /**
    * Validate input (when `inputSchema`) → run your logic → validate output (when `outputSchema`) →
-   * format. **Never throws by default**: a validation failure or a thrown error becomes the formatted
-   * output (`{ error: string }`), so a model-calling loop always gets a value back.
+   * format. **By default it doesn't throw**: a validation failure or a thrown error becomes the
+   * formatted output (`{ error: string }`) — unless your `formatOutput` throws — so a model loop
+   * keeps running.
    */
   execute(input: Input): ModelOutput | Promise<ModelOutput>;
 }

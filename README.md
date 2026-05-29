@@ -20,14 +20,14 @@ const getWeather = standardTool({
   execute: async ({ city }) => ({ tempC: 21 }), // `city` is typed; the return is validated
 });
 
-await getWeather.execute({ city: 'Paris' }); // → { tempC: number } | { error: string }; validated in & out, never throws
+await getWeather.execute({ city: 'Paris' }); // → { tempC: number } | { error: string }; validated in & out (errors → { error } by default)
 ```
 
 ## What it is
 
 - **Standalone & dependency-free.** A single, small function. The Standard Schema and Standard JSON Schema interfaces are vendored into the package, so installing it pulls in nothing else — and you can just copy the source into your project instead (see [below](#or-just-copy-paste-it)).
 - **A convention, not a framework.** It doesn't run your agent, call your model, or own your runtime. It defines only the shape — `{ name, description, inputSchema?, outputSchema?, execute }` — and the things every tool needs: validation, a JSON Schema, and a model-facing result.
-- **Validates input _and_ output — without throwing.** `execute` accepts untrusted input (e.g. JSON arguments from a model), validates it via Standard Schema (when you provide a schema — both are optional), runs your logic, then validates the result. A validation failure or a thrown error doesn't crash your loop — it comes back as `{ error: string }` (customize via `formatOutput`), so the model always gets a value.
+- **Validates input _and_ output.** `execute` accepts untrusted input (e.g. JSON arguments from a model), validates it via Standard Schema (when you provide a schema — both are optional), runs your logic, then validates the result. **By default** a validation failure or a thrown error doesn't propagate — it comes back as `{ error: string }`, so a model loop keeps running; pass a `formatOutput` to reshape that (or to re-throw).
 - **Emits JSON Schema for any model.** Because the schemas implement Standard JSON Schema, you get an OpenAI- or MCP-ready JSON Schema (any function-calling model) synchronously via `inputSchema['~standard'].jsonSchema.input(...)`.
 
 ## Why
@@ -113,7 +113,7 @@ standardTool(def): StandardTool<Input, Output, ModelOutput>;
 | `inputSchema?` | `CombinedSchema<Input>` | optional input schema — validates **and** emits JSON Schema |
 | `outputSchema?` | `CombinedSchema<Output>` | optional output schema — validates **and** emits JSON Schema |
 | `execute` (yours) | `(input: Input) => Output \| Promise<Output>` | your logic — receives validated input, returns the output |
-| `execute` (tool) | `(input: Input) => ModelOutput \| Promise<ModelOutput>` | validate in → run yours → validate out → format; **never throws by default** |
+| `execute` (tool) | `(input: Input) => ModelOutput \| Promise<ModelOutput>` | validate in → run yours → validate out → format; errors become the output (no throw) **by default** |
 | `formatOutput?` | `(result: Output \| Error) => ModelOutput` | optional; maps the result — or an `Error` carrying `issues` — to the model output. Default `result instanceof Error ? { error: result.message } : result` |
 
 `inputSchema`/`outputSchema` are optional; when present they must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`) — `Input`/`Output` are inferred from them (or from `execute` when a schema is omitted).
@@ -134,7 +134,7 @@ const getWeather = standardTool({
   execute: async ({ city }) => ({ tempC: 21 }),
 });
 
-// validated end to end — bad input or output comes back as { error: string }, never a throw:
+// validated end to end — by default, bad input or output comes back as { error: string } (override via formatOutput):
 const out = await getWeather.execute({ city: 'Paris' }); // { tempC: number } | { error: string }
 
 // JSON Schema for the model (Standard JSON Schema), synchronous (inputSchema is optional, hence `!`):
@@ -143,7 +143,7 @@ const parameters = getWeather.inputSchema!['~standard'].jsonSchema.input({ targe
 
 ## With the OpenAI API
 
-Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). Because every tool is the same neutral shape, you keep them in one array: `.map` it into the request's `tools`, then dispatch each function call back to the matching tool by `name`. Adding a fourth tool is one more array entry — no special-casing, no per-tool wiring. And because `execute` never throws by default, a malformed tool call comes back to the model as `{ error }` to self-correct, instead of crashing your loop.
+Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). Because every tool is the same neutral shape, you keep them in one array: `.map` it into the request's `tools`, then dispatch each function call back to the matching tool by `name`. Adding a fourth tool is one more array entry — no special-casing, no per-tool wiring. And because `execute` returns `{ error }` instead of throwing **by default**, a malformed tool call comes back to the model to self-correct rather than crashing your loop (a custom `formatOutput` can opt back into throwing).
 
 ```ts
 import OpenAI from 'openai';
@@ -197,7 +197,7 @@ for (const item of res.output) {
   if (item.type !== 'function_call') continue;
   const tool = tools.find((t) => t.name === item.name);
   if (!tool) continue;
-  const result = await tool.execute(JSON.parse(item.arguments)); // validates args + result; never throws (bad args → { error })
+  const result = await tool.execute(JSON.parse(item.arguments)); // validates args + result; bad args → { error } by default
   input.push({ type: 'function_call_output', call_id: item.call_id, output: JSON.stringify(result) });
 }
 

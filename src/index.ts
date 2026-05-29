@@ -20,7 +20,7 @@ export type FormatOutputFn<Output, FormattedOutput> = (
  * `FormattedOutput` is what `execute` returns to the model after formatting — by default
  * {@link DefaultFormattedOutput}, i.e. the data or an `{ error }` envelope.
  */
-export interface StandardTool<Input, Output, FormattedOutput = DefaultFormattedOutput<Output>> {
+export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = DefaultFormattedOutput<Output>> {
   name: string;
   description: string;
   /** Optional Standard Schema + Standard JSON Schema describing the input data. */
@@ -49,7 +49,7 @@ export interface StandardTool<Input, Output, FormattedOutput = DefaultFormattedO
  * Pass your own `formatOutput` to reshape the output (its return type becomes the tool's `FormattedOutput`)
  * or to throw and surface the error. Validation failures are plain `Error`s carrying an `issues` array.
  */
-export function standardTool<Input, Output, FormattedOutput = DefaultFormattedOutput<Output>>(def: {
+export function standardTool<Input = unknown, Output = unknown, FormattedOutput = DefaultFormattedOutput<Output>>(def: {
   name: string;
   description: string;
   inputSchema?: CombinedSpec<Input>;

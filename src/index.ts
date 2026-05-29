@@ -1,4 +1,4 @@
-import type { CombinedSchema, StandardSchemaV1 } from './standard-schema.js';
+import type { CombinedSpec, StandardSchemaV1 } from './standard-schema.js';
 
 export type * from './standard-schema.js';
 
@@ -24,9 +24,9 @@ export interface StandardTool<Input, Output, FormattedOutput = DefaultFormattedO
   name: string;
   description: string;
   /** Optional Standard Schema + Standard JSON Schema describing the input data. */
-  inputSchema?: CombinedSchema<Input>;
+  inputSchema?: CombinedSpec<Input>;
   /** Optional Standard Schema + Standard JSON Schema describing the output data. */
-  outputSchema?: CombinedSchema<Output>;
+  outputSchema?: CombinedSpec<Output>;
   /**
    * Validate input (when `inputSchema`) → run your logic → validate output (when `outputSchema`) →
    * format. **By default it doesn't throw**: a validation failure or a thrown error becomes the
@@ -52,8 +52,8 @@ export interface StandardTool<Input, Output, FormattedOutput = DefaultFormattedO
 export function standardTool<Input, Output, FormattedOutput = DefaultFormattedOutput<Output>>(def: {
   name: string;
   description: string;
-  inputSchema?: CombinedSchema<Input>;
-  outputSchema?: CombinedSchema<Output>;
+  inputSchema?: CombinedSpec<Input>;
+  outputSchema?: CombinedSpec<Output>;
   // biome-ignore lint/suspicious/noExplicitAny: per-call runtime context, typed by the consumer's handler
   execute: (input: Input, meta: any) => Output | Promise<Output>;
   formatOutput?: FormatOutputFn<Output, FormattedOutput>;

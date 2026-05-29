@@ -47,25 +47,25 @@ No dependency at all. Paste this and import the spec types from the official, ty
 ```ts
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 
-type CombinedSchema<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
+type CombinedSpec<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
 
 export interface StandardTool<Input, Output, FormattedOutput = Output | { error: string }> {
   name: string;
   description: string;
-  inputSchema?: CombinedSchema<Input>;
-  outputSchema?: CombinedSchema<Output>;
+  inputSchema?: CombinedSpec<Input>;
+  outputSchema?: CombinedSpec<Output>;
   execute(input: Input, meta?: any): FormattedOutput | Promise<FormattedOutput>;
 }
 
 export function standardTool<Input, Output, FormattedOutput = Output | { error: string }>(def: {
   name: string;
   description: string;
-  inputSchema?: CombinedSchema<Input>;
-  outputSchema?: CombinedSchema<Output>;
+  inputSchema?: CombinedSpec<Input>;
+  outputSchema?: CombinedSpec<Output>;
   execute: (input: Input, meta: any) => Output | Promise<Output>; // meta: optional per-call runtime context
   formatOutput?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>;
 }): StandardTool<Input, Output, FormattedOutput> {
-  const check = async <T>(where: 'input' | 'output', s: CombinedSchema<T>, v: unknown): Promise<T> => {
+  const check = async <T>(where: 'input' | 'output', s: CombinedSpec<T>, v: unknown): Promise<T> => {
     const r = await s['~standard'].validate(v);
     // a validation failure is a plain Error carrying the Standard Schema issues — no dedicated type:
     if (r.issues) throw Object.assign(new Error(`${where} validation failed`), { issues: r.issues });
@@ -108,8 +108,8 @@ standardTool(def): StandardTool<Input, Output, FormattedOutput>;
 | --- | --- | --- |
 | `name` | `string` | tool name sent to the model |
 | `description` | `string` | what the tool does |
-| `inputSchema?` | `CombinedSchema<Input>` | optional input schema — validates **and** emits JSON Schema |
-| `outputSchema?` | `CombinedSchema<Output>` | optional output schema — validates **and** emits JSON Schema |
+| `inputSchema?` | `CombinedSpec<Input>` | optional input schema — validates **and** emits JSON Schema |
+| `outputSchema?` | `CombinedSpec<Output>` | optional output schema — validates **and** emits JSON Schema |
 | `execute` (yours) | `(input: Input, meta: any) => Output \| Promise<Output>` | your logic — receives validated input and the optional per-call `meta`, returns the output |
 | `execute` (tool) | `(input: Input, meta?: any) => FormattedOutput \| Promise<FormattedOutput>` | validate in → run yours (forwarding `meta`) → validate out → format; errors become the output (no throw) **by default** |
 | `formatOutput?` | `(result: Output \| Error) => FormattedOutput` | optional; maps the result — or an `Error` carrying `issues` — to the model output. Default `result instanceof Error ? { error: result.message } : result` |

@@ -8,7 +8,7 @@ import { standardTool, type StandardTool, type CombinedSchema } from '../dist/in
 // `npm test`. A wrong type makes `Expect<false>` fail to compile.
 // `ExecOut<T>` is what `await tool.execute(...)` yields — the 3rd generic.
 // ---------------------------------------------------------------------------
-type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
 type ExecOut<T extends { execute: (input: never) => unknown }> = Awaited<ReturnType<T['execute']>>;
 
@@ -48,7 +48,7 @@ const weather = standardTool({
   description: 'Current temperature for a city',
   inputSchema,
   outputSchema,
-  execute: async ({ city }) => ({ tempC: 21 }),
+  execute: async () => ({ tempC: 21 }),
 });
 type _Weather = Expect<Equals<ExecOut<typeof weather>, { tempC: number } | { error: string }>>;
 weather satisfies StandardTool<{ city: string }, { tempC: number }>;
@@ -125,7 +125,9 @@ test('default formatOutput returns the validated value on success', async () => 
 });
 
 test('exposes JSON Schema via Standard JSON Schema', () => {
-  const schema = weather.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
+  const { inputSchema } = weather;
+  assert.ok(inputSchema); // optional on the type; present here
+  const schema = inputSchema['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
   assert.equal(schema.type, 'object');
   assert.deepEqual(schema.required, ['city']);
 });
@@ -203,7 +205,8 @@ test('supports async validators', async () => {
     '~standard': {
       version: 1,
       vendor: 'test',
-      validate: async (value) => (typeof value === 'number' ? { value } : { issues: [{ message: 'must be a number' }] }),
+      validate: async (value) =>
+        typeof value === 'number' ? { value } : { issues: [{ message: 'must be a number' }] },
       jsonSchema: { input: () => ({ type: 'number' }), output: () => ({ type: 'number' }) },
     },
   };

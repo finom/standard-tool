@@ -10,7 +10,9 @@ export type DefaultFormattedOutput<Output> = Output | { error: string };
  * validation failed) — to the formatted output. Return an envelope to keep a model loop running,
  * or throw to surface the error.
  */
-export type FormatOutputFn<Output, FormattedOutput> = (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>;
+export type FormatOutputFn<Output, FormattedOutput> = (
+  result: Output | Error
+) => FormattedOutput | Promise<FormattedOutput>;
 
 /**
  * A standard, DRY LLM tool over its **data** types `Input`/`Output`: `name` + `description` +

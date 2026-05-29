@@ -1,5 +1,4 @@
 # standard-tool
-
 [![npm](https://img.shields.io/npm/v/standard-tool)](https://www.npmjs.com/package/standard-tool) [![CI](https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/finom/standard-tool/actions/workflows/ci.yml)
 
 > A **standalone**, dependency-free convention for defining LLM tools — built on [Standard Schema](https://standardschema.dev) + [Standard JSON Schema](https://standardschema.dev/json-schema).

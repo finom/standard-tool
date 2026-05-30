@@ -24,7 +24,7 @@ await getWeather.execute({ city: 'Paris' }); // → { tempC: number } | { error:
 ## What it is
 
 - **Standalone & dependency-free.** A single, small function. The Standard Schema and Standard JSON Schema interfaces are vendored into the package, so installing it pulls in nothing else — and you can just copy the source into your project instead (see [below](#or-just-copy-paste-it)).
-- **A convention, not a framework.** It doesn't run your agent, call your model, or own your runtime. It defines only the shape — `{ name, description, inputSchema?, outputSchema?, execute }` — and the things every tool needs: validation, a JSON Schema, and a model-facing result.
+- **A convention, not a framework.** It doesn't run your agent, call your model, or own your runtime. It defines only the shape — `{ name, title?, description, inputSchema?, outputSchema?, execute }` — and the things every tool needs: validation, a JSON Schema, and a model-facing result.
 - **Validates input _and_ output.** `execute` accepts untrusted input (e.g. JSON arguments from a model), validates it via Standard Schema (when you provide a schema — both are optional), runs your logic, then validates the result. **By default** a validation failure or a thrown error doesn't propagate — it comes back as `{ error: string }`, so a model loop keeps running; pass a `formatOutput` to reshape that (or to re-throw).
 - **Emits JSON Schema for any model.** Because the schemas implement Standard JSON Schema, you get an OpenAI- or MCP-ready JSON Schema (any function-calling model) synchronously via `inputSchema['~standard'].jsonSchema.input(...)`.
 
@@ -51,6 +51,7 @@ type CombinedSpec<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
 
 export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output | { error: string }, Meta = unknown> {
   name: string;
+  title?: string;
   description: string;
   inputSchema?: CombinedSpec<Input>;
   outputSchema?: CombinedSpec<Output>;
@@ -59,6 +60,7 @@ export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput
 
 export function standardTool<Input = unknown, Output = unknown, FormattedOutput = Output | { error: string }, Meta = unknown>(def: {
   name: string;
+  title?: string;
   description: string;
   inputSchema?: CombinedSpec<Input>;
   outputSchema?: CombinedSpec<Output>;
@@ -76,6 +78,7 @@ export function standardTool<Input = unknown, Output = unknown, FormattedOutput 
     ((result: Output | Error) => (result instanceof Error ? { error: result.message } : result) as unknown as FormattedOutput);
   return {
     name: def.name,
+    title: def.title,
     description: def.description,
     inputSchema: def.inputSchema,
     outputSchema: def.outputSchema,
@@ -107,6 +110,7 @@ standardTool(def): StandardTool<Input, Output, FormattedOutput>;
 | field | type | purpose |
 | --- | --- | --- |
 | `name` | `string` | tool name sent to the model |
+| `title?` | `string` | optional human-readable label — surfaced by MCP clients in tool-list UIs; ignored by plain function-calling APIs |
 | `description` | `string` | what the tool does |
 | `inputSchema?` | `CombinedSpec<Input>` | optional input schema — validates **and** emits JSON Schema |
 | `outputSchema?` | `CombinedSpec<Output>` | optional output schema — validates **and** emits JSON Schema |
@@ -116,7 +120,7 @@ standardTool(def): StandardTool<Input, Output, FormattedOutput>;
 
 `inputSchema`/`outputSchema` are optional; when present they must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`) — `Input`/`Output` are inferred from them (or from `execute` when a schema is omitted).
 
-`standardTool` is deliberately a **thin utility**: `name`, `description`, `inputSchema`, and `outputSchema` are returned **exactly as you passed them**. Only `execute` is wrapped — it validates input and output (when schemas are present), then routes the result, or any thrown error (a validation failure is a plain `Error` carrying `issues`), through `formatOutput`. `formatOutput` defaults to the `{ error }` envelope so bad data doesn't throw and a model loop keeps going; supply your own to reshape the output (its return type becomes the tool's `FormattedOutput`) or to throw and surface the error. Note `formatOutput` is a **creation-time argument, not a field** on the returned tool — the shape stays the minimal `{ name, description, inputSchema?, outputSchema?, execute }`. That's the whole job.
+`standardTool` is deliberately a **thin utility**: `name`, `description`, `inputSchema`, and `outputSchema` are returned **exactly as you passed them**. Only `execute` is wrapped — it validates input and output (when schemas are present), then routes the result, or any thrown error (a validation failure is a plain `Error` carrying `issues`), through `formatOutput`. `formatOutput` defaults to the `{ error }` envelope so bad data doesn't throw and a model loop keeps going; supply your own to reshape the output (its return type becomes the tool's `FormattedOutput`) or to throw and surface the error. Note `formatOutput` is a **creation-time argument, not a field** on the returned tool — the shape stays the minimal `{ name, title?, description, inputSchema?, outputSchema?, execute }`. That's the whole job.
 
 ## Usage
 

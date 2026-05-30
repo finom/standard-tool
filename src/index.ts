@@ -27,6 +27,8 @@ export interface StandardTool<
   Meta = unknown,
 > {
   name: string;
+  /** Optional human-readable label for the tool, surfaced by MCP clients in tool-list UIs. Ignored by plain function-calling APIs. */
+  title?: string;
   description: string;
   /** Optional Standard Schema + Standard JSON Schema describing the input data. */
   inputSchema?: CombinedSpec<Input>;
@@ -63,6 +65,7 @@ export function standardTool<
   Meta = unknown,
 >(def: {
   name: string;
+  title?: string;
   description: string;
   inputSchema?: CombinedSpec<Input>;
   outputSchema?: CombinedSpec<Output>;
@@ -74,6 +77,7 @@ export function standardTool<
     ((result) => (result instanceof Error ? { error: result.message } : result) as unknown as FormattedOutput);
   return {
     name: def.name,
+    title: def.title,
     description: def.description,
     inputSchema: def.inputSchema,
     outputSchema: def.outputSchema,

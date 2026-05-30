@@ -142,8 +142,21 @@ expectType<Equals<Parameters<typeof looseMeta.execute>[1], unknown>>();
 // not Zod's exact wording — robust across Zod versions.
 // ---------------------------------------------------------------------------
 
-test('exposes exactly name, description, inputSchema, outputSchema, execute (no formatOutput member)', () => {
-  assert.deepEqual(Object.keys(weather).sort(), ['description', 'execute', 'inputSchema', 'name', 'outputSchema']);
+test('exposes exactly name, title, description, inputSchema, outputSchema, execute (no formatOutput member)', () => {
+  assert.deepEqual(Object.keys(weather).sort(), [
+    'description',
+    'execute',
+    'inputSchema',
+    'name',
+    'outputSchema',
+    'title',
+  ]);
+});
+
+test('passes the optional title through (undefined when omitted)', () => {
+  assert.equal(weather.title, undefined); // weather declares no title
+  const titled = standardTool({ name: 'titled', title: 'Titled Tool', description: 'd', execute: () => 1 });
+  assert.equal(titled.title, 'Titled Tool');
 });
 
 test('default formatOutput returns the validated value on success', async () => {

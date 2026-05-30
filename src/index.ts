@@ -20,7 +20,12 @@ export type FormatOutputFn<Output, FormattedOutput> = (
  * `FormattedOutput` is what `execute` returns to the model after formatting — by default
  * {@link DefaultFormattedOutput}, i.e. the data or an `{ error }` envelope.
  */
-export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = DefaultFormattedOutput<Output>> {
+export interface StandardTool<
+  Input = unknown,
+  Output = unknown,
+  FormattedOutput = DefaultFormattedOutput<Output>,
+  Meta = unknown,
+> {
   name: string;
   description: string;
   /** Optional Standard Schema + Standard JSON Schema describing the input data. */
@@ -32,10 +37,12 @@ export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput
    * format. **By default it doesn't throw**: a validation failure or a thrown error becomes the
    * formatted output (`{ error: string }`) — unless your `formatOutput` throws — so a model loop
    * keeps running. `meta` is optional per-call runtime context (auth tokens, resolvers, request-scoped
-   * data) forwarded verbatim to your handler — never validated, never in the JSON Schema.
+   * data) forwarded verbatim to your handler — never validated, never in the JSON Schema. Its type
+   * `Meta` is inferred from the annotation on the second parameter of your `execute` handler and
+   * defaults to `unknown`, so an un-annotated `meta` must be narrowed before use — annotate that
+   * parameter to type it precisely at the call site instead.
    */
-  // biome-ignore lint/suspicious/noExplicitAny: per-call runtime context, typed by the consumer's handler
-  execute(input: Input, meta?: any): FormattedOutput | Promise<FormattedOutput>;
+  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>;
 }
 
 /**
@@ -49,15 +56,19 @@ export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput
  * Pass your own `formatOutput` to reshape the output (its return type becomes the tool's `FormattedOutput`)
  * or to throw and surface the error. Validation failures are plain `Error`s carrying an `issues` array.
  */
-export function standardTool<Input = unknown, Output = unknown, FormattedOutput = DefaultFormattedOutput<Output>>(def: {
+export function standardTool<
+  Input = unknown,
+  Output = unknown,
+  FormattedOutput = DefaultFormattedOutput<Output>,
+  Meta = unknown,
+>(def: {
   name: string;
   description: string;
   inputSchema?: CombinedSpec<Input>;
   outputSchema?: CombinedSpec<Output>;
-  // biome-ignore lint/suspicious/noExplicitAny: per-call runtime context, typed by the consumer's handler
-  execute: (input: Input, meta: any) => Output | Promise<Output>;
+  execute: (input: Input, meta: Meta) => Output | Promise<Output>;
   formatOutput?: FormatOutputFn<Output, FormattedOutput>;
-}): StandardTool<Input, Output, FormattedOutput> {
+}): StandardTool<Input, Output, FormattedOutput, Meta> {
   const formatOutput: FormatOutputFn<Output, FormattedOutput> =
     def.formatOutput ??
     ((result) => (result instanceof Error ? { error: result.message } : result) as unknown as FormattedOutput);
@@ -70,7 +81,7 @@ export function standardTool<Input = unknown, Output = unknown, FormattedOutput 
       let result: Output | Error;
       try {
         const validInput = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
-        const output = await def.execute(validInput, meta);
+        const output = await def.execute(validInput, meta as Meta);
         result = def.outputSchema ? await validate('output', def.outputSchema, output) : output;
       } catch (error) {
         result = error instanceof Error ? error : new Error(String(error));

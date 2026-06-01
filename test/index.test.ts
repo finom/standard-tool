@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import { standardTool, type StandardTool } from '../dist/index.js';
+import { standardTool, type StandardTool, type FormatOutputFn } from '../dist/index.js';
 
 // ---------------------------------------------------------------------------
 // Compile-time exact-type assertions, enforced by `npm run typecheck`
@@ -102,6 +102,36 @@ const greet = standardTool({
   execute: ({ name }, meta: { punct: string }) => `hi ${name}${meta.punct}`,
 });
 expectType<Equals<ExecOut<typeof greet>, string | { error: string }>>();
+
+// (8) MCP text-only formatter — the README "With an MCP server" recipe, verified end to end.
+// Output | Error → MCP CallToolResult: object → JSON text + structuredContent; string → text; error → text + isError.
+type McpToolResult = {
+  content: { type: 'text'; text: string }[];
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+};
+const toMcpResult: FormatOutputFn<unknown, McpToolResult> = (result) => {
+  if (result instanceof Error) {
+    return { content: [{ type: 'text', text: result.message }], isError: true };
+  }
+  if (typeof result === 'string') {
+    return { content: [{ type: 'text', text: result }] };
+  }
+  const text = JSON.stringify(result);
+  if (result !== null && typeof result === 'object' && !Array.isArray(result)) {
+    return { content: [{ type: 'text', text }], structuredContent: result as Record<string, unknown> };
+  }
+  return { content: [{ type: 'text', text }] };
+};
+const mcpWeather = standardTool({
+  name: 'get_weather',
+  description: 'Current temperature for a city',
+  inputSchema,
+  outputSchema,
+  formatOutput: toMcpResult,
+  execute: async () => ({ tempC: 21 }),
+});
+expectType<Equals<ExecOut<typeof mcpWeather>, McpToolResult>>();
 
 // ---------------------------------------------------------------------------
 // Runtime behavior. Error assertions check standardTool's own prefix
@@ -231,4 +261,19 @@ test('supports async validators', async () => {
   });
   expectType<Equals<ExecOut<typeof double>, number | { error: string }>>();
   assert.equal(await double.execute(21), 42);
+});
+
+test('MCP formatter: object output → JSON text block + structuredContent', async () => {
+  assert.deepEqual(await mcpWeather.execute({ city: 'Paris' }), {
+    content: [{ type: 'text', text: '{"tempC":21}' }],
+    structuredContent: { tempC: 21 },
+  });
+});
+
+test('MCP formatter: validation error → text block + isError (no structuredContent)', async () => {
+  const out = await mcpWeather.execute({ city: 123 } as unknown as { city: string });
+  assert.equal(out.isError, true);
+  assert.equal(out.content[0].type, 'text');
+  assert.match(out.content[0].text, /^input validation failed:/);
+  assert.equal('structuredContent' in out, false);
 });

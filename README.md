@@ -250,6 +250,76 @@ const final = await client.responses.create({ model: 'gpt-5', input });
 console.log(final.output_text);
 ```
 
+## With an MCP server
+
+[MCP](https://modelcontextprotocol.io) tools return a structured **result envelope** — `{ content, structuredContent?, isError? }` — not just raw data. A `formatOutput` maps `execute`'s result onto it, so the tool itself stays neutral and the MCP shape lives in one small, swappable adapter. This one is **text-only**: an object result is JSON-encoded into a text block _and_ mirrored into `structuredContent` (per MCP's [backwards-compatibility guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), errors come back with `isError: true` (a self-correctable tool error), and image/audio/resource blocks are out of scope.
+
+```ts
+import type { FormatOutputFn } from 'standard-tool';
+
+type McpToolResult = {
+  content: { type: 'text'; text: string }[];
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+};
+
+// Output | Error → MCP CallToolResult
+const toMcpResult: FormatOutputFn<unknown, McpToolResult> = (result) => {
+  if (result instanceof Error) {
+    return { content: [{ type: 'text', text: result.message }], isError: true }; // tool error the model can self-correct
+  }
+  if (typeof result === 'string') {
+    return { content: [{ type: 'text', text: result }] };
+  }
+  const text = JSON.stringify(result);
+  if (result !== null && typeof result === 'object' && !Array.isArray(result)) {
+    return { content: [{ type: 'text', text }], structuredContent: result as Record<string, unknown> };
+  }
+  return { content: [{ type: 'text', text }] };
+};
+```
+
+Pass it as `formatOutput`, then register the tool with the [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) — whose `registerTool` takes a Standard Schema for `inputSchema`/`outputSchema`, i.e. the very schemas you already handed to `standardTool`:
+
+```ts
+import { McpServer } from '@modelcontextprotocol/server';
+import { standardTool } from 'standard-tool';
+import { z } from 'zod';
+
+const inputSchema = z.object({ city: z.string() });
+const outputSchema = z.object({ tempC: z.number() });
+
+const getWeather = standardTool({
+  name: 'get_weather',
+  title: 'Get weather',
+  description: 'Current temperature for a city',
+  inputSchema,
+  outputSchema,
+  execute: async ({ city }) => ({ tempC: 21 }),
+  formatOutput: toMcpResult, // ← from above
+});
+
+// getWeather.execute({ city: 'Paris' })
+//   → { content: [{ type: 'text', text: '{"tempC":21}' }], structuredContent: { tempC: 21 } }
+// bad input (or a thrown error / invalid output)
+//   → { content: [{ type: 'text', text: 'input validation failed: …' }], isError: true }
+
+const server = new McpServer({ name: 'weather', version: '1.0.0' });
+
+server.registerTool(
+  getWeather.name,
+  {
+    title: getWeather.title,
+    description: getWeather.description,
+    inputSchema, // a Standard Schema — the SDK emits the JSON Schema the model sees
+    outputSchema, // lets the client validate structuredContent
+  },
+  (args) => getWeather.execute(args) // already a CallToolResult
+);
+```
+
+Because `execute` returns the `{ …, isError: true }` envelope instead of throwing, a malformed tool call reaches the model as self-correctable feedback rather than crashing the server.
+
 ## Links
 
 - **Standard Schema** — https://standardschema.dev

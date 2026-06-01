@@ -255,14 +255,14 @@ tools: [{
 const result = await getWeather.execute(JSON.parse(call.arguments)); // validates args + result
 ```
 
-**(b) An MCP server** — the fields line up directly:
+**(b) An MCP server** — give the tool an MCP `formatOutput` (so `execute` returns a `{ content, structuredContent, isError }` result), then hand the Standard Schema straight to `registerTool`:
 
 ```ts
 server.registerTool(getWeather.name, {
   title: getWeather.title,
   description: getWeather.description,
-  inputSchema: getWeather.inputSchema, // the underlying Zod schema flows straight into registerTool
-}, (args) => getWeather.execute(args));
+  inputSchema: getWeather.inputSchema, // a Standard Schema — the SDK emits JSON Schema from it
+}, (args) => getWeather.execute(args)); // → { content, structuredContent, isError } (see the MCP formatter in the README)
 ```
 
 **(c) A Vercel AI SDK adapter** — wrap the neutral shape into `tool()`:

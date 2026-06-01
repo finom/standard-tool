@@ -186,6 +186,57 @@ const getWeather = standardTool({
 await getWeather.execute({ city: 'Paris' }); // { tempC: number } — rejects on bad input/output
 ```
 
+## MCP-compatible output
+
+[MCP](https://modelcontextprotocol.io) tools return a structured **result envelope** — `{ content, structuredContent?, isError? }` — not just raw data. A `formatOutput` can map `execute`'s result onto exactly that shape, so a `standard-tool` is consumable by an MCP server with no translation. This one is **text-only**: an object result is JSON-encoded into a text block _and_ mirrored into `structuredContent` (per MCP's [backwards-compatibility guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), errors come back with `isError: true` (a self-correctable tool error), and image/audio/resource blocks are out of scope.
+
+```ts
+import type { FormatOutputFn } from 'standard-tool';
+
+type McpToolResult = {
+  content: { type: 'text'; text: string }[];
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+};
+
+// Output | Error → MCP CallToolResult
+const toMcpResult: FormatOutputFn<unknown, McpToolResult> = (result) => {
+  if (result instanceof Error) {
+    return { content: [{ type: 'text', text: result.message }], isError: true }; // tool error the model can self-correct
+  }
+  if (typeof result === 'string') {
+    return { content: [{ type: 'text', text: result }] };
+  }
+  const text = JSON.stringify(result);
+  if (result !== null && typeof result === 'object' && !Array.isArray(result)) {
+    return { content: [{ type: 'text', text }], structuredContent: result as Record<string, unknown> };
+  }
+  return { content: [{ type: 'text', text }] };
+};
+```
+
+Wire it in as `formatOutput`, and `execute` returns a value shaped exactly like an MCP `CallToolResult`:
+
+```ts
+const getWeather = standardTool({
+  name: 'get_weather',
+  title: 'Get weather',
+  description: 'Current temperature for a city',
+  inputSchema: z.object({ city: z.string() }),
+  outputSchema: z.object({ tempC: z.number() }),
+  execute: async ({ city }) => ({ tempC: 21 }),
+  formatOutput: toMcpResult,
+});
+
+await getWeather.execute({ city: 'Paris' });
+// → { content: [{ type: 'text', text: '{"tempC":21}' }], structuredContent: { tempC: 21 } }
+//
+// bad input, a thrown error, or invalid output instead →
+// → { content: [{ type: 'text', text: 'input validation failed: …' }], isError: true }
+```
+
+That's the exact shape an MCP server returns from a `tools/call` handler — so a `standard-tool` drops straight in. Wiring it into a specific MCP SDK is out of scope here.
+
 ## With the OpenAI API
 
 Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). Because every tool is the same neutral shape, you keep them in one array: `.map` it into the request's `tools`, then dispatch each function call back to the matching tool by `name`. Adding a fourth tool is one more array entry — no special-casing, no per-tool wiring. And because `execute` returns `{ error }` instead of throwing **by default**, a malformed tool call comes back to the model to self-correct rather than crashing your loop (a custom `formatOutput` can opt back into throwing).
@@ -249,57 +300,6 @@ for (const item of res.output) {
 const final = await client.responses.create({ model: 'gpt-5', input });
 console.log(final.output_text);
 ```
-
-## MCP-compatible output
-
-[MCP](https://modelcontextprotocol.io) tools return a structured **result envelope** — `{ content, structuredContent?, isError? }` — not just raw data. A `formatOutput` can map `execute`'s result onto exactly that shape, so a `standard-tool` is consumable by an MCP server with no translation. This one is **text-only**: an object result is JSON-encoded into a text block _and_ mirrored into `structuredContent` (per MCP's [backwards-compatibility guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), errors come back with `isError: true` (a self-correctable tool error), and image/audio/resource blocks are out of scope.
-
-```ts
-import type { FormatOutputFn } from 'standard-tool';
-
-type McpToolResult = {
-  content: { type: 'text'; text: string }[];
-  structuredContent?: Record<string, unknown>;
-  isError?: boolean;
-};
-
-// Output | Error → MCP CallToolResult
-const toMcpResult: FormatOutputFn<unknown, McpToolResult> = (result) => {
-  if (result instanceof Error) {
-    return { content: [{ type: 'text', text: result.message }], isError: true }; // tool error the model can self-correct
-  }
-  if (typeof result === 'string') {
-    return { content: [{ type: 'text', text: result }] };
-  }
-  const text = JSON.stringify(result);
-  if (result !== null && typeof result === 'object' && !Array.isArray(result)) {
-    return { content: [{ type: 'text', text }], structuredContent: result as Record<string, unknown> };
-  }
-  return { content: [{ type: 'text', text }] };
-};
-```
-
-Wire it in as `formatOutput`, and `execute` returns a value shaped exactly like an MCP `CallToolResult`:
-
-```ts
-const getWeather = standardTool({
-  name: 'get_weather',
-  title: 'Get weather',
-  description: 'Current temperature for a city',
-  inputSchema: z.object({ city: z.string() }),
-  outputSchema: z.object({ tempC: z.number() }),
-  execute: async ({ city }) => ({ tempC: 21 }),
-  formatOutput: toMcpResult,
-});
-
-await getWeather.execute({ city: 'Paris' });
-// → { content: [{ type: 'text', text: '{"tempC":21}' }], structuredContent: { tempC: 21 } }
-//
-// bad input, a thrown error, or invalid output instead →
-// → { content: [{ type: 'text', text: 'input validation failed: …' }], isError: true }
-```
-
-That's the exact shape an MCP server returns from a `tools/call` handler — so a `standard-tool` drops straight in. Wiring it into a specific MCP SDK is out of scope here.
 
 ## Links
 

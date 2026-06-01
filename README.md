@@ -250,9 +250,9 @@ const final = await client.responses.create({ model: 'gpt-5', input });
 console.log(final.output_text);
 ```
 
-## With an MCP server
+## MCP-compatible output
 
-[MCP](https://modelcontextprotocol.io) tools return a structured **result envelope** — `{ content, structuredContent?, isError? }` — not just raw data. A `formatOutput` maps `execute`'s result onto it, so the tool itself stays neutral and the MCP shape lives in one small, swappable adapter. This one is **text-only**: an object result is JSON-encoded into a text block _and_ mirrored into `structuredContent` (per MCP's [backwards-compatibility guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), errors come back with `isError: true` (a self-correctable tool error), and image/audio/resource blocks are out of scope.
+[MCP](https://modelcontextprotocol.io) tools return a structured **result envelope** — `{ content, structuredContent?, isError? }` — not just raw data. A `formatOutput` can map `execute`'s result onto exactly that shape, so a `standard-tool` is consumable by an MCP server with no translation. This one is **text-only**: an object result is JSON-encoded into a text block _and_ mirrored into `structuredContent` (per MCP's [backwards-compatibility guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), errors come back with `isError: true` (a self-correctable tool error), and image/audio/resource blocks are out of scope.
 
 ```ts
 import type { FormatOutputFn } from 'standard-tool';
@@ -279,46 +279,27 @@ const toMcpResult: FormatOutputFn<unknown, McpToolResult> = (result) => {
 };
 ```
 
-Pass it as `formatOutput`, then register the tool with the [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) — whose `registerTool` takes a Standard Schema for `inputSchema`/`outputSchema`, i.e. the very schemas you already handed to `standardTool`:
+Wire it in as `formatOutput`, and `execute` returns a value shaped exactly like an MCP `CallToolResult`:
 
 ```ts
-import { McpServer } from '@modelcontextprotocol/server';
-import { standardTool } from 'standard-tool';
-import { z } from 'zod';
-
-const inputSchema = z.object({ city: z.string() });
-const outputSchema = z.object({ tempC: z.number() });
-
 const getWeather = standardTool({
   name: 'get_weather',
   title: 'Get weather',
   description: 'Current temperature for a city',
-  inputSchema,
-  outputSchema,
+  inputSchema: z.object({ city: z.string() }),
+  outputSchema: z.object({ tempC: z.number() }),
   execute: async ({ city }) => ({ tempC: 21 }),
-  formatOutput: toMcpResult, // ← from above
+  formatOutput: toMcpResult,
 });
 
-// getWeather.execute({ city: 'Paris' })
-//   → { content: [{ type: 'text', text: '{"tempC":21}' }], structuredContent: { tempC: 21 } }
-// bad input (or a thrown error / invalid output)
-//   → { content: [{ type: 'text', text: 'input validation failed: …' }], isError: true }
-
-const server = new McpServer({ name: 'weather', version: '1.0.0' });
-
-server.registerTool(
-  getWeather.name,
-  {
-    title: getWeather.title,
-    description: getWeather.description,
-    inputSchema, // a Standard Schema — the SDK emits the JSON Schema the model sees
-    outputSchema, // lets the client validate structuredContent
-  },
-  (args) => getWeather.execute(args) // already a CallToolResult
-);
+await getWeather.execute({ city: 'Paris' });
+// → { content: [{ type: 'text', text: '{"tempC":21}' }], structuredContent: { tempC: 21 } }
+//
+// bad input, a thrown error, or invalid output instead →
+// → { content: [{ type: 'text', text: 'input validation failed: …' }], isError: true }
 ```
 
-Because `execute` returns the `{ …, isError: true }` envelope instead of throwing, a malformed tool call reaches the model as self-correctable feedback rather than crashing the server.
+That's the exact shape an MCP server returns from a `tools/call` handler — so a `standard-tool` drops straight in. Wiring it into a specific MCP SDK is out of scope here.
 
 ## Links
 

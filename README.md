@@ -104,7 +104,7 @@ export function standardTool<Input = unknown, Output = unknown, FormattedOutput 
 ## API
 
 ```ts
-import { standardTool, type StandardTool, type FormatOutputFn } from 'standard-tool';
+import { standardTool, type StandardTool } from 'standard-tool';
 
 standardTool(def): StandardTool<Input, Output, FormattedOutput>;
 ```
@@ -191,16 +191,15 @@ await getWeather.execute({ city: 'Paris' }); // { tempC: number } — rejects on
 [MCP](https://modelcontextprotocol.io) tools return a structured **result envelope** — `{ content, structuredContent?, isError? }` — not just raw data. A `formatOutput` can map `execute`'s result onto exactly that shape, so a `standard-tool` is consumable by an MCP server with no translation. This one is **text-only**: an object result is JSON-encoded into a text block _and_ mirrored into `structuredContent` (per MCP's [backwards-compatibility guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), errors come back with `isError: true` (a self-correctable tool error), and image/audio/resource blocks are out of scope.
 
 ```ts
-import type { FormatOutputFn } from 'standard-tool';
-
 type McpToolResult = {
   content: { type: 'text'; text: string }[];
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
 };
 
-// Output | Error → MCP CallToolResult
-const toMcpResult: FormatOutputFn<unknown, McpToolResult> = (result) => {
+// A plain function — standardTool adapts it (infers FormattedOutput from the return type).
+// `result` is your Output, or an Error (validation/exec failure).
+const toMcpResult = (result: unknown): McpToolResult => {
   if (result instanceof Error) {
     return { content: [{ type: 'text', text: result.message }], isError: true }; // tool error the model can self-correct
   }

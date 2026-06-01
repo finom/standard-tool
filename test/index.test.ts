@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import { standardTool, type StandardTool, type FormatOutputFn } from '../dist/index.js';
+import { standardTool, type StandardTool } from '../dist/index.js';
 
 // ---------------------------------------------------------------------------
 // Compile-time exact-type assertions, enforced by `npm run typecheck`
@@ -103,14 +103,15 @@ const greet = standardTool({
 });
 expectType<Equals<ExecOut<typeof greet>, string | { error: string }>>();
 
-// (8) MCP text-only formatter — the README "With an MCP server" recipe, verified end to end.
+// (8) MCP text-only formatter — the README "MCP-compatible output" recipe, verified end to end.
 // Output | Error → MCP CallToolResult: object → JSON text + structuredContent; string → text; error → text + isError.
+// Defined as a plain function (no exported helper type) — standardTool adapts it via return-type inference.
 type McpToolResult = {
   content: { type: 'text'; text: string }[];
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
 };
-const toMcpResult: FormatOutputFn<unknown, McpToolResult> = (result) => {
+const toMcpResult = (result: unknown): McpToolResult => {
   if (result instanceof Error) {
     return { content: [{ type: 'text', text: result.message }], isError: true };
   }

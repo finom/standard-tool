@@ -6,15 +6,6 @@ export type * from './standard-schema.js';
 export type DefaultFormattedOutput<Output> = Output | { error: string };
 
 /**
- * Maps a raw tool result — your `Output`, or an `Error` (carrying `issues` when a Standard Schema
- * validation failed) — to the formatted output. Return an envelope to keep a model loop running,
- * or throw to surface the error.
- */
-export type FormatOutputFn<Output, FormattedOutput> = (
-  result: Output | Error
-) => FormattedOutput | Promise<FormattedOutput>;
-
-/**
  * A standard, DRY LLM tool over its **data** types `Input`/`Output`: `name` + `description` +
  * optional Standard-Schema/JSON-Schema `inputSchema`/`outputSchema` + `execute(input: Input)`.
  * `FormattedOutput` is what `execute` returns to the model after formatting — by default
@@ -59,9 +50,9 @@ export function standardTool<Input = unknown, Output = unknown, FormattedOutput 
   outputSchema?: CombinedSpec<Output>;
   // biome-ignore lint/suspicious/noExplicitAny: per-call runtime context, typed by the consumer's handler
   execute: (input: Input, meta: any) => Output | Promise<Output>;
-  formatOutput?: FormatOutputFn<Output, FormattedOutput>;
+  formatOutput?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>;
 }): StandardTool<Input, Output, FormattedOutput> {
-  const formatOutput: FormatOutputFn<Output, FormattedOutput> =
+  const formatOutput: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput> =
     def.formatOutput ??
     ((result) => (result instanceof Error ? { error: result.message } : result) as unknown as FormattedOutput);
   return {

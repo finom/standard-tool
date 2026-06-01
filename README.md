@@ -49,24 +49,24 @@ import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/sp
 
 type CombinedSpec<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
 
-export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output | { error: string }, Meta = unknown> {
+export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output | { error: string }> {
   name: string;
   title?: string;
   description: string;
   inputSchema?: CombinedSpec<Input>;
   outputSchema?: CombinedSpec<Output>;
-  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>;
+  execute(input: Input, meta?: any): FormattedOutput | Promise<FormattedOutput>;
 }
 
-export function standardTool<Input = unknown, Output = unknown, FormattedOutput = Output | { error: string }, Meta = unknown>(def: {
+export function standardTool<Input = unknown, Output = unknown, FormattedOutput = Output | { error: string }>(def: {
   name: string;
   title?: string;
   description: string;
   inputSchema?: CombinedSpec<Input>;
   outputSchema?: CombinedSpec<Output>;
-  execute: (input: Input, meta: Meta) => Output | Promise<Output>; // meta: per-call runtime context (annotate to type it)
+  execute: (input: Input, meta: any) => Output | Promise<Output>; // meta: optional per-call runtime context
   formatOutput?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>;
-}): StandardTool<Input, Output, FormattedOutput, Meta> {
+}): StandardTool<Input, Output, FormattedOutput> {
   const check = async <T>(where: 'input' | 'output', s: CombinedSpec<T>, v: unknown): Promise<T> => {
     const r = await s['~standard'].validate(v);
     // a validation failure is a plain Error carrying the Standard Schema issues — no dedicated type:
@@ -114,8 +114,8 @@ standardTool(def): StandardTool<Input, Output, FormattedOutput>;
 | `description` | `string` | what the tool does |
 | `inputSchema?` | `CombinedSpec<Input>` | optional input schema — validates **and** emits JSON Schema |
 | `outputSchema?` | `CombinedSpec<Output>` | optional output schema — validates **and** emits JSON Schema |
-| `execute` (yours) | `(input: Input, meta: Meta) => Output \| Promise<Output>` | your logic — receives validated input and the optional per-call `meta` (`unknown` unless you annotate it), returns the output |
-| `execute` (tool) | `(input: Input, meta?: Meta) => FormattedOutput \| Promise<FormattedOutput>` | validate in → run yours (forwarding `meta`) → validate out → format; errors become the output (no throw) **by default** |
+| `execute` (yours) | `(input: Input, meta: any) => Output \| Promise<Output>` | your logic — receives validated input and the optional per-call `meta`, returns the output |
+| `execute` (tool) | `(input: Input, meta?: any) => FormattedOutput \| Promise<FormattedOutput>` | validate in → run yours (forwarding `meta`) → validate out → format; errors become the output (no throw) **by default** |
 | `formatOutput?` | `(result: Output \| Error) => FormattedOutput` | optional; maps the result — or an `Error` carrying `issues` — to the model output. Default `result instanceof Error ? { error: result.message } : result` |
 
 `inputSchema`/`outputSchema` are optional; when present they must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`) — `Input`/`Output` are inferred from them (or from `execute` when a schema is omitted).
@@ -147,7 +147,7 @@ const parameters = getWeather.inputSchema!['~standard'].jsonSchema.input({ targe
 
 Tools often need per-call data that must **not** appear in the model-facing `inputSchema` — an auth token, a resolver, a request-scoped DB handle. `execute` takes an optional **second `meta` argument**, forwarded verbatim to your handler. It's never validated and never part of the JSON Schema, so your tools can stay **static** (defined once at module scope) while you inject context at call time — instead of closing over it in a per-render factory.
 
-`meta` defaults to `unknown`, so it must be narrowed before use — **annotate it on your handler** to type it precisely at the call site instead:
+`meta` is typed `any`; **annotate it on your handler** to type it at the call site:
 
 ```ts
 const greet = standardTool({

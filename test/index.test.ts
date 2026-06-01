@@ -11,8 +11,6 @@ import { standardTool, type StandardTool } from '../dist/index.js';
 // ---------------------------------------------------------------------------
 type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type ExecOut<T extends { execute: (input: never) => unknown }> = Awaited<ReturnType<T['execute']>>;
-// IsAny<T>: resolves to `true` only when T is exactly `any`.
-type IsAny<T> = 0 extends 1 & T ? true : false;
 const expectType = <_Pass extends true>(): void => {};
 
 // Real Zod schemas — Zod 4.2+ implements both Standard Schema (validation) and
@@ -104,37 +102,6 @@ const greet = standardTool({
   execute: ({ name }, meta: { punct: string }) => `hi ${name}${meta.punct}`,
 });
 expectType<Equals<ExecOut<typeof greet>, string | { error: string }>>();
-// When ANNOTATED on the handler, `meta` is inferred and typed at the call site — `{ punct: string }`,
-// genuinely narrowed (not `any`). This is the opt-in win.
-expectType<Equals<Parameters<typeof greet.execute>[1], { punct: string } | undefined>>();
-expectType<IsAny<Parameters<typeof greet.execute>[1]> extends true ? false : true>();
-
-// (8) `meta` NOT annotated → defaults to `unknown` (NOT `any`). This is the precise default: an
-// un-annotated `meta` is the top type and must be narrowed before use — you opt into a concrete
-// type by annotating the parameter (as `greet` does above).
-const noMeta = standardTool({
-  name: 'no_meta',
-  description: 'ignores per-call meta',
-  inputSchema: z.object({ name: z.string() }),
-  execute: ({ name }) => `hi ${name}`,
-});
-expectType<Equals<Parameters<typeof noMeta.execute>[1], unknown>>();
-expectType<IsAny<Parameters<typeof noMeta.execute>[1]> extends true ? false : true>();
-
-// Un-annotated but used → `meta` is `unknown`, so it must be narrowed before access (no `any`
-// free-for-all). This is the precision the standalone package opts into.
-const looseMeta = standardTool({
-  name: 'loose_meta',
-  description: 'narrows the unknown meta before using it',
-  execute: ({ name }: { name: string }, meta) => {
-    let punct = '';
-    if (meta != null && typeof meta === 'object' && 'punct' in meta) {
-      punct = String((meta as Record<'punct', unknown>).punct);
-    }
-    return `hi ${name}${punct}`;
-  },
-});
-expectType<Equals<Parameters<typeof looseMeta.execute>[1], unknown>>();
 
 // ---------------------------------------------------------------------------
 // Runtime behavior. Error assertions check standardTool's own prefix

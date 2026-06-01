@@ -94,7 +94,7 @@ MCP also defines structured results (`structuredContent`) and says that when an 
 
 These wrap the wire format *and* the execution. This is where fragmentation is worst, because each one invents its own object and binds it to its own runtime.
 
-**Vercel AI SDK (v5)** — note v5 renamed `parameters` → `inputSchema`:
+**Vercel AI SDK** — `tool()`, from the `ai` package:
 
 ```ts
 import { tool } from 'ai';
@@ -108,7 +108,7 @@ const getWeather = tool({
 });
 ```
 
-The `tool()` helper exists *specifically* so TypeScript can connect `inputSchema` to `execute`'s argument types. Tools are keyed by name in a record passed to `generateText`/`streamText`. ([AI SDK `tool` reference](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool), [AI SDK 5](https://vercel.com/blog/ai-sdk-5))
+The `tool()` helper exists *specifically* so TypeScript can connect `inputSchema` to `execute`'s argument types. Tools are keyed by name in a record passed to `generateText`/`streamText`, and the value is coupled to the SDK's own `Tool`/`ToolSet` types. ([AI SDK `tool` reference](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool))
 
 **MCP TypeScript SDK** — `registerTool`:
 
@@ -132,9 +132,9 @@ createTool({
 });
 ```
 
-Mastra's docs state input/output schemas "can be defined using any library that supports Standard JSON Schema, including Zod, Valibot, and ArkType." ([Mastra `createTool`](https://mastra.ai/reference/tools/create-tool)) — i.e. one major framework has *independently* arrived at the same foundation this proposal is built on.
+Mastra's docs state input/output schemas "can be defined using any library that supports Standard JSON Schema, including Zod, Valibot, and ArkType." ([Mastra `createTool`](https://mastra.ai/reference/tools/create-tool)) — i.e. one major framework already builds its tool **schemas** on the same foundation as this proposal. The tool *object*, though, stays bound to `@mastra/core` (see below).
 
-**Genkit** — `ai.defineTool({ name, description, inputSchema, outputSchema }, fn)`. **LangChain** — `tool(fn, { name, description, schema })`, or infers the schema from the function signature. **LlamaIndex** — `FunctionTool.from_defaults(fn, name, description, fn_schema)`. **Pydantic AI / smolagents / OpenAI Agents SDK / Semantic Kernel / CrewAI / AutoGen** each have their own decorator or class. **oRPC** and **Effect** expose tool/`AiTool` builders. **Vovk** (the project this package was extracted from) derives tools from typed procedures into a `VovkTool`.
+**Genkit** — `ai.defineTool({ name, description, inputSchema, outputSchema }, fn)`. **LangChain** — `tool(fn, { name, description, schema })`, or infers the schema from the function signature. **LlamaIndex** — `FunctionTool.from_defaults(fn, name, description, fn_schema)`. **Pydantic AI / smolagents / OpenAI Agents SDK / Semantic Kernel / CrewAI / AutoGen** each have their own decorator or class. **oRPC** and **Effect** expose tool/`AiTool` builders.
 
 A compact cross-section:
 
@@ -144,19 +144,25 @@ A compact cross-section:
 | Messages API (2nd provider) | ✅ | ✅ | `input_schema` | — | (you wire it) | — | JSON Schema |
 | Gemini | ✅ | ✅ | `parameters` | — | (you wire it) | — | OpenAPI 3.0 subset |
 | MCP | ✅ | ✅ | `inputSchema` | `outputSchema` | server handler | `title`, `annotations` | JSON Schema |
-| Vercel AI SDK v5 | (key) | ✅ | `inputSchema` | `outputSchema` | `execute` | — | Zod / JSON Schema |
+| Vercel AI SDK | (key) | ✅ | `inputSchema` | `outputSchema` | `execute` | — | Zod / JSON Schema |
 | Mastra | `id` | ✅ | `inputSchema` | `outputSchema` | `execute` | — | Standard JSON Schema |
 | Genkit | ✅ | ✅ | `inputSchema` | `outputSchema` | fn | — | Zod |
 | LangChain | ✅ | ✅ | `schema` | — | fn | — | Zod / inferred |
-| Vovk | ✅ | ✅ | `parameters`/`inputSchema` | `outputSchema` | `execute` | `title` | Standard Schema |
 | **`standard-tool`** | ✅ | ✅ | `inputSchema` | `outputSchema` | `execute` | `title` | **Standard (JSON) Schema** |
 
-The columns are nearly identical. The objects are mutually incompatible. That gap — same semantics, different envelopes — is the entire problem.
+The columns are nearly identical; the objects are mutually incompatible. And — the part worth dwelling on — **none of these tool primitives is obtainable on its own.** Each ships *inside* a framework package and returns a *framework-coupled* value:
+
+- **Mastra** `createTool` lives in `@mastra/core` (~50 MB installed, ~31 deps — agents, workflows, memory, storage, vector, an HTTP server); the docs say you "most likely don't want to use it as a standalone package."
+- **Genkit** `defineTool` is a method on a live `genkit()` instance — you can't define a tool without first initializing the framework.
+- **LangChain** `tool()` returns a `StructuredTool` (a Runnable) from `@langchain/core`.
+- **Vercel AI SDK** `tool()` needs the `ai` package and yields an SDK-typed `Tool`.
+
+So "just reuse framework X's tool" means adopting framework X. That gap — identical semantics, incompatible envelopes, each weldable only to its own runtime — is the entire problem.
 
 ### 2.3 The schema layer (the part that's actually standardized)
 
 - **JSON Schema** is the lingua franca for *describing* parameters to a model — but it's a family of dialects (draft-07, draft-2020-12, the OpenAPI-3.0 subset, plus provider-specific "strict" constraints).
-- **[Standard Schema](https://standardschema.dev)** — a ~60-line TypeScript interface (`~standard`) co-designed by the authors of **Zod, Valibot, and ArkType**, all of which implement it. It unifies *validation*: any tool can call `schema['~standard'].validate(value)` without knowing which library produced the schema. It's already consumed by tRPC, TanStack Form/Router, and others. Its pitch — reducing N×M integrations to N+M — is exactly the pitch for tools.
+- **[Standard Schema](https://standardschema.dev)** — a ~60-line TypeScript interface (`~standard`) co-designed by the authors of **Zod, Valibot, and ArkType**, all of which implement it. (Despite the name, it's a community *convention* — a shared interface that spread by adoption — not a standards-body standard; the same goes for Standard JSON Schema.) It unifies *validation*: any tool can call `schema['~standard'].validate(value)` without knowing which library produced the schema. It's already consumed by tRPC, TanStack Form/Router, and others. Its pitch — reducing N×M integrations to N+M — is exactly the pitch for tools.
 - **[Standard JSON Schema](https://standardschema.dev/json-schema)** — the newer companion that unifies *JSON-Schema emission*. A single interface:
 
   ```ts
@@ -205,6 +211,8 @@ interface StandardTool<Input, Output, FormattedOutput, /* meta is any */> {
 ```
 
 …where `CombinedSpec` is "a schema that both validates **and** emits JSON Schema" — i.e. Zod 4.2+, ArkType 2.1.28+, or Valibot (+ `@valibot/to-json-schema`). The spec interfaces are *vendored* (copied in), so the package has **zero dependencies** and can equally be pasted into a project.
+
+**The type is the proposal.** Like Standard Schema, `standard-tool` is fundamentally this *interface*: anything that produces or consumes a matching object interoperates, with no dependency. The `standardTool()` function used throughout is a *reference implementation* — a convenient way to build a conforming tool (validation, output formatting) — not a required runtime.
 
 `execute` validates input → runs your logic → validates output → formats the result (by default, errors become `{ error }` so a model loop keeps running). The schemas are returned untouched, so any consumer can reach JSON Schema synchronously:
 
@@ -275,7 +283,7 @@ expect(await getWeather.execute({ city: 'Paris' })).toEqual({ tempC: 21 });
 expect(await getWeather.execute({ city: 123 as any })).toMatchObject({ error: expect.any(String) });
 ```
 
-**(e) Derived from an existing API** — a layer like Vovk's `deriveTools` can emit `standard-tool`-shaped objects from typed RPC procedures or imported OpenAPI specs, so an existing backend becomes a tool catalog without hand-writing wrappers.
+**(e) Derived from an existing API** — a derive-from-API layer can emit `standard-tool`-shaped objects from typed RPC procedures or imported OpenAPI specs, so an existing backend becomes a tool catalog without hand-writing wrappers.
 
 Broaden the lens and the same shape underwrites: a **shareable tool registry** (publish reusable tools as plain objects, not framework plugins), **cross-runtime** use (zero deps → browser, edge, workers), and **multi-target** apps that must speak to several providers and an MCP endpoint from one definition.
 
@@ -285,7 +293,7 @@ Broaden the lens and the same shape underwrites: a **shareable tool registry** (
 
 A proposal that only lists its strengths isn't worth reading. The strongest objections:
 
-**"Yet another standard" ([XKCD 927](https://xkcd.com/927/)).** The most serious one. Rebuttal: `standard-tool` is *not* a competing framework — it has no runtime to adopt and no lock-in. It rides interfaces the ecosystem has *already* adopted (Standard Schema is in Zod/Valibot/ArkType and consumed by tRPC/TanStack). The risk is real, but the surface area to "win" is tiny: it's a type, not a platform. Honest concession: it still adds *one more* shape to the pile, and that only pays off with adoption it does not yet have.
+**"Yet another standard" ([XKCD 927](https://xkcd.com/927/)).** The most serious one — though note that "Standard Schema" and "Standard JSON Schema" aren't ratified standards either; they're *conventions* that won by adoption (Zod/Valibot/ArkType implement Standard Schema; tRPC/TanStack consume it). That's exactly the bet here: `standard-tool` is *not* a competing framework — it has no runtime to adopt and no lock-in; it just rides those same conventions one level up. The surface area to "win" is tiny: it's a type, not a platform. Honest concession: it still adds *one more* shape to the pile, and that only pays off with adoption it does not yet have.
 
 **Standard JSON Schema is new.** Standard Schema is broadly adopted; Standard JSON Schema (the emission half) is more recent and less proven. Building on it is a bet. Mitigant: it's a vendored interface, not a dependency — if it stalls, consumers aren't broken, and the validators already ship the implementations. But "the foundation is young" is a fair criticism.
 
@@ -299,7 +307,7 @@ A proposal that only lists its strengths isn't worth reading. The strongest obje
 
 **Adoption is the whole game.** A "convention" that nobody else produces or consumes is just a tidy wrapper for its author. Today `standard-tool` is closer to the latter. Its bet is that (a) the shape is obvious enough that adapters are trivial, and (b) the Standard Schema precedent shows neutral interfaces *can* spread. Unproven.
 
-**Why not just extend Mastra's `createTool` or the AI SDK's `tool()`?** Both are close (§2.2) — but both are bound to a package and a runtime. The value proposition is specifically *not* importing a framework to define a tool. If the ecosystem would rather converge on one of those, that's a legitimate outcome; this proposal exists to make the neutral, dependency-free option concrete enough to argue about.
+**Why not just extend Mastra's `createTool` or the AI SDK's `tool()`?** They're the closest prior art — but every one is **bundled inside a framework** and returns a **framework-coupled object** (§2.2): you can't get Mastra's `createTool` without `@mastra/core` (~50 MB), Genkit's `defineTool` without a live `genkit()` instance, LangChain's `tool()` without `@langchain/core`, or the AI SDK's `tool()` without `ai`. The "neutral, zero-dep tool *definition*" slot is, as far as this survey found, **empty** — the framework-agnostic libraries that exist are LLM *clients* (unified call APIs) that bundle tool support, not portable tool *definitions*. Honest caveat: the closest thing to a neutral standard is **MCP's** `Tool` JSON shape — but that's a wire format, with no in-process authoring, validation, or `execute`. If the ecosystem would rather converge on extending one of the framework primitives, that's a legitimate outcome; this proposal exists to make the neutral, dependency-free option concrete enough to argue about.
 
 ---
 
@@ -319,11 +327,9 @@ A proposal that only lists its strengths isn't worth reading. The strongest obje
 
 ## 9. Open questions
 
-- Should `meta` be `unknown` (safer) or `any` (frictionless)? Currently `any`, to match the framework it was extracted from.
+- Should `meta` be `unknown` (safer) or `any` (frictionless)? Currently `any`, since tools are invoked by a model/runtime, not hand-called in typed code.
 - Should result-formatting live in the tool at all, or always be a separate step?
-- Is `outputSchema` worth its weight given thin provider support today?
 - What's the minimal *adapter* set (provider loop, MCP, AI SDK, LangChain) that would make adoption real — and should those ship as separate tiny packages or be left to consumers?
-- Does standardizing the envelope actually reduce work, or just move it into adapters? (The honest test: are the adapters smaller than the per-framework wrappers they replace?)
 
 ---
 
@@ -334,6 +340,7 @@ A proposal that only lists its strengths isn't worth reading. The strongest obje
 - MCP tools specification (2025-06-18) — <https://modelcontextprotocol.io/specification/2025-06-18/server/tools>
 - OpenAI function calling — <https://developers.openai.com/api/docs/guides/function-calling> · Structured Outputs — <https://openai.com/index/introducing-structured-outputs-in-the-api/>
 - Google Gemini function calling — <https://ai.google.dev/gemini-api/docs/function-calling>
-- Vercel AI SDK `tool()` — <https://ai-sdk.dev/docs/reference/ai-sdk-core/tool> · AI SDK 5 — <https://vercel.com/blog/ai-sdk-5>
-- Mastra `createTool` — <https://mastra.ai/reference/tools/create-tool>
+- Vercel AI SDK `tool()` — <https://ai-sdk.dev/docs/reference/ai-sdk-core/tool>
+- Mastra `createTool` — <https://mastra.ai/reference/tools/create-tool> · `@mastra/core` size/deps — <https://www.npmjs.com/package/@mastra/core>
+- Genkit tool calling — <https://genkit.dev/docs/tool-calling/> · LangChain `@langchain/core` tools — <https://www.npmjs.com/package/@langchain/core>
 - XKCD 927, "Standards" — <https://xkcd.com/927/>

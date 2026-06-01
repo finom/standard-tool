@@ -2,11 +2,13 @@
 
 > **Status — Proposal (RFC).** `standard-tool` is an early proposal for a shared, framework-agnostic way to define LLM tools, published to gather feedback and pressure-test the design — **not** a finalized standard, and the shape may still change. Issues, critiques, and counter-proposals are very welcome.
 
-> A **standalone**, dependency-free convention for defining LLM tools — built on [Standard Schema](https://standardschema.dev) + [Standard JSON Schema](https://standardschema.dev/json-schema).
+> A common **type** for defining LLM tools — built on [Standard Schema](https://standardschema.dev) + [Standard JSON Schema](https://standardschema.dev/json-schema).
 
-`standard-tool` is one tiny function that gives an LLM tool a single, neutral shape: a `name`, a `description`, an `execute` function, and `inputSchema`/`outputSchema` that both **validate** their data (Standard Schema) and **emit JSON Schema** for the model (Standard JSON Schema). No framework, no runtime dependencies — copy-paste it or `npm i standard-tool`.
+`standard-tool` is a common **type** for defining LLM tools, designed to be produced and consumed by any framework, SDK, or app.
 
-It's intended as a **community-wide standard** — the same way [Standard Schema](https://standardschema.dev) became a shared validation interface across Zod, Valibot, and ArkType, and the way the [Vercel AI SDK](https://ai-sdk.dev) popularized a common tool definition. The idea is one neutral contract that any library, framework, or app can **produce or consume**, instead of every project reinventing its own incompatible tool object.
+The goal is to let a tool be defined once and used anywhere — across providers and frameworks — instead of writing a separate, incompatible tool object for each one. It builds on [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema): the optional `inputSchema`/`outputSchema` both **validate** their data and **emit JSON Schema** for the model.
+
+Like Standard Schema — the shared validation interface implemented by Zod, Valibot, and ArkType — the proposal is an **interface**, not a library you depend on; you can conform to it with a plain object and zero dependencies. The package also ships a small **reference implementation**, the `standardTool()` function, which builds a conforming tool with input/output validation and error-handling included.
 
 ```ts
 import { standardTool } from 'standard-tool';
@@ -25,7 +27,7 @@ await getWeather.execute({ city: 'Paris' }); // → { tempC: number } | { error:
 
 ## What it is
 
-- **Standalone & dependency-free.** A single, small function. The Standard Schema and Standard JSON Schema interfaces are vendored into the package, so installing it pulls in nothing else — and you can just copy the source into your project instead (see [below](#or-just-copy-paste-it)).
+- **Standalone & dependency-free.** A type, plus a small reference implementation of it. The Standard Schema and Standard JSON Schema interfaces are vendored into the package, so installing it pulls in nothing else — and you can just copy the source into your project instead (see [below](#or-just-copy-paste-it)).
 - **A convention, not a framework.** It doesn't run your agent, call your model, or own your runtime. It defines only the shape — `{ name, title?, description, inputSchema?, outputSchema?, execute }` — and the things every tool needs: validation, a JSON Schema, and a model-facing result.
 - **Validates input _and_ output.** `execute` accepts untrusted input (e.g. JSON arguments from a model), validates it via Standard Schema (when you provide a schema — both are optional), runs your logic, then validates the result. **By default** a validation failure or a thrown error doesn't propagate — it comes back as `{ error: string }`, so a model loop keeps running; pass a `formatOutput` to reshape that (or to re-throw).
 - **Emits JSON Schema for any model.** Because the schemas implement Standard JSON Schema, you get an OpenAI- or MCP-ready JSON Schema (any function-calling model) synchronously via `inputSchema['~standard'].jsonSchema.input(...)`.

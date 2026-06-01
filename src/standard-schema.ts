@@ -176,7 +176,7 @@ export interface CombinedProps<Input = unknown, Output = Input>
 
 /**
  * A schema that BOTH validates (Standard Schema) and emits JSON Schema (Standard JSON Schema).
- * Natively implemented by Zod 4.2+, ArkType 2.1.28+, Valibot 1.2+ (via @valibot/to-json-schema), and Vovk.
+ * Natively implemented by Zod 4.2+, ArkType 2.1.28+, and Valibot 1.2+ (via @valibot/to-json-schema).
  */
 export interface CombinedSpec<Input = unknown, Output = Input> {
   readonly '~standard': CombinedProps<Input, Output>;

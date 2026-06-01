@@ -164,27 +164,3 @@ export declare namespace StandardJSONSchemaV1 {
   /** Infers the output type of a Standard. */
   export type InferOutput<Schema extends StandardTypedV1> = StandardTypedV1.InferOutput<Schema>;
 }
-
-// ###############################
-// ###   Combined Schema       ###
-// ###############################
-
-/** Props of a schema that implements BOTH Standard Schema and Standard JSON Schema. */
-export interface CombinedProps<Input = unknown, Output = Input>
-  extends StandardSchemaV1.Props<Input, Output>,
-    StandardJSONSchemaV1.Props<Input, Output> {}
-
-/**
- * A schema that BOTH validates (Standard Schema) and emits JSON Schema (Standard JSON Schema).
- * Natively implemented by Zod 4.2+, ArkType 2.1.28+, and Valibot 1.2+ (via @valibot/to-json-schema).
- */
-export interface CombinedSpec<Input = unknown, Output = Input> {
-  readonly '~standard': CombinedProps<Input, Output>;
-}
-
-export declare namespace CombinedSpec {
-  export type Target = StandardJSONSchemaV1.Target;
-  export type InferInput<T extends StandardSchemaV1> = StandardSchemaV1.InferInput<T>;
-  export type InferOutput<T extends StandardSchemaV1> = StandardSchemaV1.InferOutput<T>;
-  export type SuccessResult<T> = StandardSchemaV1.SuccessResult<T>;
-}

@@ -1,6 +1,6 @@
-import type { CombinedSpec, StandardSchemaV1 } from './standard-schema.js';
+import type { StandardSchemaV1, StandardJSONSchemaV1 } from './standard-schema.js';
 
-export type * from './standard-schema.js';
+type CombinedSpec<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
 
 /** The default formatted output: your `Output`, or an `{ error }` envelope when execution or validation failed. */
 export type DefaultFormattedOutput<Output> = Output | { error: string };

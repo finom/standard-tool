@@ -1,5 +1,7 @@
 # standard-tool &nbsp;[![npm](https://img.shields.io/npm/v/standard-tool)](https://www.npmjs.com/package/standard-tool) [![CI](https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/finom/standard-tool/actions/workflows/ci.yml)
 
+> **Status — Proposal (RFC).** `standard-tool` is an early proposal for a shared, framework-agnostic way to define LLM tools, published to gather feedback and pressure-test the design — **not** a finalized standard, and the shape may still change. Issues, critiques, and counter-proposals are very welcome.
+
 > A **standalone**, dependency-free convention for defining LLM tools — built on [Standard Schema](https://standardschema.dev) + [Standard JSON Schema](https://standardschema.dev/json-schema).
 
 `standard-tool` is one tiny function that gives an LLM tool a single, neutral shape: a `name`, a `description`, an `execute` function, and `inputSchema`/`outputSchema` that both **validate** their data (Standard Schema) and **emit JSON Schema** for the model (Standard JSON Schema). No framework, no runtime dependencies — copy-paste it or `npm i standard-tool`.

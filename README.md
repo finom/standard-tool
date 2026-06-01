@@ -1,14 +1,14 @@
 # standard-tool &nbsp;[![npm](https://img.shields.io/npm/v/standard-tool)](https://www.npmjs.com/package/standard-tool) [![CI](https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/finom/standard-tool/actions/workflows/ci.yml)
 
-> **Status — Proposal (RFC).** `standard-tool` is an early proposal for a shared, framework-agnostic way to define LLM tools, published to gather feedback and pressure-test the design — **not** a finalized standard, and the shape may still change. Issues, critiques, and counter-proposals are very welcome.
+> **Status: proposal (RFC).** This is an early proposal for a shared, framework-agnostic way to define LLM tools. It's published to gather feedback and pressure-test the design, not as a finished standard, so the shape may still change. Issues, critiques, and counter-proposals are welcome.
 
-> A common **type** for defining LLM tools — built on [Standard Schema](https://standardschema.dev) + [Standard JSON Schema](https://standardschema.dev/json-schema).
+> A common type for defining LLM tools, built on [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema).
 
-`standard-tool` is a common **type** for defining LLM tools, designed to be produced and consumed by any framework, SDK, or app.
+`standard-tool` is a common type for defining LLM tools, meant to be produced and consumed by any framework, SDK, or app.
 
-The goal is to let a tool be defined once and used anywhere — across providers and frameworks — instead of writing a separate, incompatible tool object for each one. It builds on [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema): the optional `inputSchema`/`outputSchema` both **validate** their data and **emit JSON Schema** for the model.
+The goal is to define a tool once and use it anywhere, across providers and frameworks, instead of writing a separate, incompatible tool object for each one. It builds on [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema): the optional `inputSchema` and `outputSchema` both validate their data and emit JSON Schema for the model.
 
-Like Standard Schema — the shared validation interface implemented by Zod, Valibot, and ArkType — the proposal is an **interface**, not a library you depend on; you can conform to it with a plain object and zero dependencies. The package also ships a small **reference implementation**, the `standardTool()` function, which builds a conforming tool with input/output validation and error-handling included.
+Standard Schema is the shared validation interface that Zod, Valibot, and ArkType implement, and this proposal follows the same idea. It's an interface, not a library you depend on, so you can conform to it with a plain object and zero dependencies. The package also ships a small reference implementation, the `standardTool()` function, which builds a conforming tool with input and output validation and error handling included.
 
 ```ts
 import { standardTool } from 'standard-tool';
@@ -27,14 +27,14 @@ await getWeather.execute({ city: 'Paris' }); // → { tempC: number } | { error:
 
 ## What it is
 
-- **Standalone & dependency-free.** A type, plus a small reference implementation of it. The Standard Schema and Standard JSON Schema interfaces are vendored into the package, so installing it pulls in nothing else — and you can just copy the source into your project instead (see [below](#or-just-copy-paste-it)).
-- **A convention, not a framework.** It doesn't run your agent, call your model, or own your runtime. It defines only the shape — `{ name, title?, description, inputSchema?, outputSchema?, execute }` — and the things every tool needs: validation, a JSON Schema, and a model-facing result.
-- **Validates input _and_ output.** `execute` accepts untrusted input (e.g. JSON arguments from a model), validates it via Standard Schema (when you provide a schema — both are optional), runs your logic, then validates the result. **By default** a validation failure or a thrown error doesn't propagate — it comes back as `{ error: string }`, so a model loop keeps running; pass a `formatOutput` to reshape that (or to re-throw).
-- **Emits JSON Schema for any model.** Because the schemas implement Standard JSON Schema, you get an OpenAI- or MCP-ready JSON Schema (any function-calling model) synchronously via `inputSchema['~standard'].jsonSchema.input(...)`.
+- Standalone and dependency-free: a type, plus a small reference implementation of it. The Standard Schema and Standard JSON Schema interfaces are vendored into the package, so installing it pulls in nothing else. You can also copy the source into your project instead (see [below](#or-just-copy-paste-it)).
+- A convention, not a framework: it doesn't run your agent, call your model, or own your runtime. It defines only the shape, `{ name, title?, description, inputSchema?, outputSchema?, execute }`, plus the things every tool needs: validation, a JSON Schema, and a model-facing result.
+- Validates input and output: `execute` accepts untrusted input, such as JSON arguments from a model, and validates it via Standard Schema when you provide a schema (both are optional). It runs your logic, then validates the result. By default a validation failure or a thrown error doesn't propagate; it comes back as `{ error: string }`, so a model loop keeps running. Pass a `formatOutput` to reshape that, or to re-throw.
+- Emits JSON Schema for any model: because the schemas implement Standard JSON Schema, you get an OpenAI- or MCP-ready JSON Schema synchronously via `inputSchema['~standard'].jsonSchema.input(...)`.
 
 ## Why
 
-Every LLM framework ships its own tool object — Vercel AI SDK, MCP, oRPC, Effect — each a different shape, none portable, most welded to the framework. But the hard part — schema interop — is **already** standardized: Standard Schema for validation and Standard JSON Schema for JSON Schema emission. `standard-tool` is the missing, neutral wrapper around them: small enough to become a shared convention rather than another framework lock-in.
+Every LLM framework ships its own tool object: Vercel AI SDK, MCP, oRPC, Effect. Each is a different shape, none portable, most welded to the framework. But the hard part, schema interop, is already solved by Standard Schema for validation and Standard JSON Schema for JSON Schema emission. `standard-tool` is a neutral wrapper around them, small enough to become a shared convention rather than another framework lock-in.
 
 ## Install
 
@@ -123,22 +123,22 @@ import { standardTool, type StandardTool } from 'standard-tool';
 standardTool(def): StandardTool<Input, Output, FormattedOutput>;
 ```
 
-`Input`/`Output` are your **data types** (what your `execute` accepts and returns); the optional schemas describe them. `FormattedOutput` is what the tool hands the model after formatting — `Output | { error: string }` by default. `execute` also takes an optional second `meta` argument — per-call runtime context forwarded verbatim to your handler, never validated and never in the JSON Schema (see [Per-call runtime context](#per-call-runtime-context-meta)).
+`Input` and `Output` are your data types: what your `execute` accepts and returns. The optional schemas describe them. `FormattedOutput` is what the tool hands the model after formatting, `Output | { error: string }` by default. `execute` also takes an optional second `meta` argument, per-call runtime context forwarded verbatim to your handler, never validated and never in the JSON Schema (see [Per-call runtime context](#per-call-runtime-context-meta)).
 
 | field | type | purpose |
 | --- | --- | --- |
 | `name` | `string` | tool name sent to the model |
-| `title?` | `string` | optional human-readable label — surfaced by MCP clients in tool-list UIs; ignored by plain function-calling APIs |
+| `title?` | `string` | optional human-readable label, surfaced by MCP clients in tool-list UIs; ignored by plain function-calling APIs |
 | `description` | `string` | what the tool does |
-| `inputSchema?` | `CombinedSpec<Input>` | optional input schema — validates **and** emits JSON Schema |
-| `outputSchema?` | `CombinedSpec<Output>` | optional output schema — validates **and** emits JSON Schema |
-| `execute` (yours) | `(input: Input, meta: any) => Output \| Promise<Output>` | your logic — receives validated input and the optional per-call `meta`, returns the output |
-| `execute` (tool) | `(input: Input, meta?: any) => FormattedOutput \| Promise<FormattedOutput>` | validate in → run yours (forwarding `meta`) → validate out → format; errors become the output (no throw) **by default** |
-| `formatOutput?` | `(result: Output \| Error) => FormattedOutput` | optional; maps the result — or an `Error` carrying `issues` — to the model output. Default `result instanceof Error ? { error: result.message } : result` |
+| `inputSchema?` | `CombinedSpec<Input>` | optional input schema; validates and emits JSON Schema |
+| `outputSchema?` | `CombinedSpec<Output>` | optional output schema; validates and emits JSON Schema |
+| `execute` (yours) | `(input: Input, meta: any) => Output \| Promise<Output>` | your logic; receives validated input and the optional per-call `meta`, returns the output |
+| `execute` (tool) | `(input: Input, meta?: any) => FormattedOutput \| Promise<FormattedOutput>` | validate in, run yours (forwarding `meta`), validate out, format; errors become the output (no throw) by default |
+| `formatOutput?` | `(result: Output \| Error) => FormattedOutput` | optional; maps the result (or an `Error` carrying `issues`) to the model output. Default `result instanceof Error ? { error: result.message } : result` |
 
-`inputSchema`/`outputSchema` are optional; when present they must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`) — `Input`/`Output` are inferred from them (or from `execute` when a schema is omitted).
+`inputSchema` and `outputSchema` are optional. When present they must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`). `Input` and `Output` are inferred from them, or from `execute` when a schema is omitted.
 
-`standardTool` is deliberately a **thin utility**: `name`, `description`, `inputSchema`, and `outputSchema` are returned **exactly as you passed them**. Only `execute` is wrapped — it validates input and output (when schemas are present), then routes the result, or any thrown error (a validation failure is a plain `Error` carrying `issues`), through `formatOutput`. `formatOutput` defaults to the `{ error }` envelope so bad data doesn't throw and a model loop keeps going; supply your own to reshape the output (its return type becomes the tool's `FormattedOutput`) or to throw and surface the error. Note `formatOutput` is a **creation-time argument, not a field** on the returned tool — the shape stays the minimal `{ name, title?, description, inputSchema?, outputSchema?, execute }`. That's the whole job.
+`standardTool` is deliberately a thin utility. `name`, `description`, `inputSchema`, and `outputSchema` come back exactly as you passed them. Only `execute` is wrapped: it validates input and output when schemas are present, then routes the result (or any thrown error, since a validation failure is a plain `Error` carrying `issues`) through `formatOutput`. `formatOutput` defaults to the `{ error }` envelope, so bad data doesn't throw and a model loop keeps going. Supply your own to reshape the output (its return type becomes the tool's `FormattedOutput`) or to throw and surface the error. Note that `formatOutput` is a creation-time argument, not a field on the returned tool, so the shape stays the minimal `{ name, title?, description, inputSchema?, outputSchema?, execute }`. That's the whole job.
 
 ## Usage
 
@@ -154,7 +154,7 @@ const getWeather = standardTool({
   execute: async ({ city }) => ({ tempC: 21 }),
 });
 
-// validated end to end — by default, bad input or output comes back as { error: string } (override via formatOutput):
+// validated end to end; by default, bad input or output comes back as { error: string } (override via formatOutput):
 const out = await getWeather.execute({ city: 'Paris' }); // { tempC: number } | { error: string }
 
 // JSON Schema for the model (Standard JSON Schema), synchronous (inputSchema is optional, hence `!`):
@@ -163,9 +163,9 @@ const parameters = getWeather.inputSchema!['~standard'].jsonSchema.input({ targe
 
 ## Per-call runtime context (`meta`)
 
-Tools often need per-call data that must **not** appear in the model-facing `inputSchema` — an auth token, a resolver, a request-scoped DB handle. `execute` takes an optional **second `meta` argument**, forwarded verbatim to your handler. It's never validated and never part of the JSON Schema, so your tools can stay **static** (defined once at module scope) while you inject context at call time — instead of closing over it in a per-render factory.
+Tools often need per-call data that should not appear in the model-facing `inputSchema`, such as an auth token, a resolver, or a request-scoped DB handle. `execute` takes an optional second `meta` argument, forwarded verbatim to your handler. It's never validated and never part of the JSON Schema, so your tools can stay static (defined once at module scope) while you inject context at call time, instead of closing over it in a per-render factory.
 
-`meta` is typed `any`; **annotate it on your handler** to type it at the call site:
+`meta` is typed `any`. Annotate it on your handler to type it at the call site:
 
 ```ts
 const greet = standardTool({
@@ -178,11 +178,11 @@ const greet = standardTool({
 await greet.execute({ name: 'Ada' }, { punct: '!' }); // → 'hi Ada!'
 ```
 
-Tools that don't need it just call `execute(input)` — `meta` is optional.
+Tools that don't need it just call `execute(input)`; `meta` is optional.
 
 ## Throwing instead of the `{ error }` envelope
 
-By default a validation failure or a thrown error comes back as `{ error: string }`, so a model loop can keep running. When you'd rather have `execute` **throw** — e.g. to let a caller's `try/catch` handle failures — re-throw the `Error` from `formatOutput`:
+By default a validation failure or a thrown error comes back as `{ error: string }`, so a model loop can keep running. When you'd rather have `execute` throw, for example to let a caller's `try/catch` handle failures, re-throw the `Error` from `formatOutput`:
 
 ```ts
 const getWeather = standardTool({
@@ -197,12 +197,12 @@ const getWeather = standardTool({
   },
 });
 
-await getWeather.execute({ city: 'Paris' }); // { tempC: number } — rejects on bad input/output
+await getWeather.execute({ city: 'Paris' }); // { tempC: number }; rejects on bad input/output
 ```
 
 ## MCP-compatible output
 
-[MCP](https://modelcontextprotocol.io) tools return a structured **result envelope** — `{ content, structuredContent?, isError? }` — not just raw data. A `formatOutput` can map `execute`'s result onto exactly that shape, so a `standard-tool` is consumable by an MCP server with no translation. This one is **text-only**: an object result is JSON-encoded into a text block _and_ mirrored into `structuredContent` (per MCP's [backwards-compatibility guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), errors come back with `isError: true` (a self-correctable tool error), and image/audio/resource blocks are out of scope.
+[MCP](https://modelcontextprotocol.io) tools return a structured result envelope, `{ content, structuredContent?, isError? }`, not just raw data. A `formatOutput` can map `execute`'s result onto that shape, so a `standard-tool` is consumable by an MCP server with no translation. The formatter below is text-only: an object result is JSON-encoded into a text block and also mirrored into `structuredContent` (per MCP's [backwards-compatibility guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), errors come back with `isError: true` (a self-correctable tool error), and image, audio, and resource blocks are out of scope.
 
 ```ts
 type McpToolResult = {
@@ -211,7 +211,7 @@ type McpToolResult = {
   isError?: boolean;
 };
 
-// A plain function — standardTool adapts it (infers FormattedOutput from the return type).
+// A plain function; standardTool adapts it (infers FormattedOutput from the return type).
 // `result` is your Output, or an Error (validation/exec failure).
 const toMcpResult = (result: unknown): McpToolResult => {
   if (result instanceof Error) {
@@ -245,14 +245,14 @@ await getWeather.execute({ city: 'Paris' });
 // → { content: [{ type: 'text', text: '{"tempC":21}' }], structuredContent: { tempC: 21 } }
 //
 // bad input, a thrown error, or invalid output instead →
-// → { content: [{ type: 'text', text: 'input validation failed: …' }], isError: true }
+// → { content: [{ type: 'text', text: 'input validation failed: ...' }], isError: true }
 ```
 
-That's the exact shape an MCP server returns from a `tools/call` handler — so a `standard-tool` drops straight in. Wiring it into a specific MCP SDK is out of scope here.
+That's the exact shape an MCP server returns from a `tools/call` handler, so a `standard-tool` drops straight in. Wiring it into a specific MCP SDK is out of scope here.
 
 ## With the OpenAI API
 
-Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). Because every tool is the same neutral shape, you keep them in one array: `.map` it into the request's `tools`, then dispatch each function call back to the matching tool by `name`. Adding a fourth tool is one more array entry — no special-casing, no per-tool wiring. And because `execute` returns `{ error }` instead of throwing **by default**, a malformed tool call comes back to the model to self-correct rather than crashing your loop (a custom `formatOutput` can opt back into throwing).
+Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). Because every tool is the same neutral shape, you keep them in one array, `.map` it into the request's `tools`, then dispatch each function call back to the matching tool by `name`. Adding a fourth tool is one more array entry, with no special-casing and no per-tool wiring. And because `execute` returns `{ error }` instead of throwing by default, a malformed tool call goes back to the model to self-correct rather than crashing your loop (a custom `formatOutput` can opt back into throwing).
 
 ```ts
 import OpenAI from 'openai';
@@ -316,9 +316,9 @@ console.log(final.output_text);
 
 ## Links
 
-- **Standard Schema** — https://standardschema.dev
-- **Standard JSON Schema** — https://standardschema.dev/json-schema
-- **@standard-schema/spec** — https://github.com/standard-schema/standard-schema
+- [Standard Schema](https://standardschema.dev)
+- [Standard JSON Schema](https://standardschema.dev/json-schema)
+- [@standard-schema/spec](https://github.com/standard-schema/standard-schema)
 
 ## License
 

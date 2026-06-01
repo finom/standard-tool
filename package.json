@@ -16,6 +16,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "build:site": "node scripts/build-site.mjs",
     "prepare": "tsc",
     "typecheck": "tsc -p tsconfig.test.json",
     "lint": "biome check",

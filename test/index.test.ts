@@ -3,25 +3,17 @@ import assert from 'node:assert/strict';
 import { z } from 'zod';
 import { standardTool, type StandardTool } from '../dist/index.js';
 
-// ---------------------------------------------------------------------------
-// Compile-time exact-type assertions, enforced by `npm run typecheck`
-// (tsconfig.test.json, run in CI via `npm test`). `expectType<…>()` accepts only
-// `true`, so a wrong type fails to compile. `ExecOut<T>` is what
-// `await tool.execute(...)` yields — the 3rd generic (the formatted output).
-// ---------------------------------------------------------------------------
+// Compile-time type assertions (checked by `npm run typecheck`). expectType<T> accepts
+// only `true`, so a wrong type fails to compile. ExecOut<T> = the awaited execute() return.
 type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type ExecOut<T extends { execute: (input: never) => unknown }> = Awaited<ReturnType<T['execute']>>;
 const expectType = <_Pass extends true>(): void => {};
 
-// Real Zod schemas — Zod 4.2+ implements both Standard Schema (validation) and
-// Standard JSON Schema (`~standard.jsonSchema`), so it plugs into standardTool as-is.
+// Real Zod schemas (Zod 4.2+ implements both Standard Schema and Standard JSON Schema).
 const inputSchema = z.object({ city: z.string() });
 const outputSchema = z.object({ tempC: z.number() });
 
-// ---------------------------------------------------------------------------
-// Tools at module scope, one per `formatOutput` variant, so we can assert the
-// type of `execute` (and reuse them in the runtime tests below).
-// ---------------------------------------------------------------------------
+// One tool per formatOutput variant, reused by the runtime tests below.
 
 // (1) default formatOutput, with schemas → FormattedOutput = Output | { error }
 const weather = standardTool({
@@ -93,8 +85,7 @@ const strict = standardTool({
 });
 expectType<Equals<ExecOut<typeof strict>, { tempC: number }>>();
 
-// (7) per-call `meta` — forwarded verbatim to the handler, which annotates its own type.
-// No outputSchema + default formatOutput → FormattedOutput = Output | { error }.
+// (7) per-call meta forwarded to the handler; no outputSchema → FormattedOutput = Output | { error }
 const greet = standardTool({
   name: 'greet',
   description: 'greets with per-call punctuation',
@@ -103,9 +94,7 @@ const greet = standardTool({
 });
 expectType<Equals<ExecOut<typeof greet>, string | { error: string }>>();
 
-// (8) MCP text-only formatter — the README "MCP-compatible output" recipe, verified end to end.
-// Output | Error → MCP CallToolResult: object → JSON text + structuredContent; string → text; error → text + isError.
-// Defined as a plain function (no exported helper type) — standardTool adapts it via return-type inference.
+// (8) MCP text-only formatter: the README recipe, verified here.
 type McpToolResult = {
   content: { type: 'text'; text: string }[];
   structuredContent?: Record<string, unknown>;
@@ -134,11 +123,8 @@ const mcpWeather = standardTool({
 });
 expectType<Equals<ExecOut<typeof mcpWeather>, McpToolResult>>();
 
-// ---------------------------------------------------------------------------
-// Runtime behavior. Error assertions check standardTool's own prefix
-// (`input/output validation failed:`) and the Standard Schema issue `path`,
-// not Zod's exact wording — robust across Zod versions.
-// ---------------------------------------------------------------------------
+// Runtime behavior. Error assertions check standardTool's prefix and the Standard
+// Schema issue path, not Zod's wording, so they hold across Zod versions.
 
 test('exposes exactly name, title, description, inputSchema, outputSchema, execute (no formatOutput member)', () => {
   assert.deepEqual(Object.keys(weather).sort(), [
@@ -245,8 +231,7 @@ test('forwards the per-call meta argument verbatim to the handler', async () => 
 });
 
 test('default generics: bare StandardTool needs no type args and holds heterogeneous tools', () => {
-  // Input/Output default to `unknown`, so `StandardTool[]` requires no args; execute is a
-  // method (bivariant), so specific tools assign in. This is the README OpenAI-loop case.
+  // Input/Output default to unknown, so StandardTool[] needs no args (execute is bivariant).
   const toolArray: StandardTool[] = [weather, echo, stringFmt, greet];
   assert.equal(toolArray.length, 4);
 });

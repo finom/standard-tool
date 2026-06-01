@@ -57,7 +57,7 @@ OpenAI's Responses API is flatter and drops the `function` wrapper:
 
 `strict: true` is built on Structured Outputs and imposes extra rules on the JSON Schema: every object needs `additionalProperties: false`, and every property must be listed in `required` (optionals are expressed as `"type": ["string", "null"]`). So the same logical schema must be emitted differently depending on whether strict mode is on. ([function calling guide](https://developers.openai.com/api/docs/guides/function-calling), [structured outputs](https://openai.com/index/introducing-structured-outputs-in-the-api/))
 
-A second major provider's Messages API uses an `input_schema` key instead of `parameters`:
+Anthropic's Messages API uses an `input_schema` key instead of `parameters`:
 
 ```jsonc
 { "name": "get_weather", "description": "…", "input_schema": { "type": "object", "properties": { "city": { "type": "string" } }, "required": ["city"] } }
@@ -71,7 +71,7 @@ Google Gemini's `functionDeclarations` wrap the same idea but accept only an Ope
 
 Supported keywords are limited (`type`, `properties`, `items`, `enum`, `required`, and a few more); `default`, `oneOf`, and others are not supported. ([Gemini function calling](https://ai.google.dev/gemini-api/docs/function-calling))
 
-The Model Context Protocol (MCP) is the closest thing to a cross-vendor standard for tools. Its `Tool` is:
+The Model Context Protocol (MCP), introduced by Anthropic, is the closest thing to a cross-vendor standard for tools. Its `Tool` is:
 
 ```jsonc
 {
@@ -141,7 +141,7 @@ A compact cross-section:
 | Ecosystem | name | desc | params key | output schema | execute | title/meta | schema source |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | OpenAI (Responses) | ✅ | ✅ | `parameters` | n/a | (you wire it) | n/a | JSON Schema (+ strict) |
-| Messages API (2nd provider) | ✅ | ✅ | `input_schema` | n/a | (you wire it) | n/a | JSON Schema |
+| Anthropic (Messages API) | ✅ | ✅ | `input_schema` | n/a | (you wire it) | n/a | JSON Schema |
 | Gemini | ✅ | ✅ | `parameters` | n/a | (you wire it) | n/a | OpenAPI 3.0 subset |
 | MCP | ✅ | ✅ | `inputSchema` | `outputSchema` | server handler | `title`, `annotations` | JSON Schema |
 | Vercel AI SDK | (key) | ✅ | `inputSchema` | `outputSchema` | `execute` | n/a | Zod / JSON Schema |
@@ -289,25 +289,17 @@ Broaden the lens and the same shape underwrites a shareable tool registry (publi
 
 ---
 
-## 6. Critical analysis: the case against (steelmanned)
+## 6. The case against
 
-A proposal that only lists its strengths isn't worth reading. The strongest objections follow.
+The objections worth taking seriously:
 
-"Yet another standard" ([XKCD 927](https://xkcd.com/927/)). This is the most serious objection. Note, though, that "Standard Schema" and "Standard JSON Schema" aren't ratified standards either; they're conventions that won by adoption (Zod, Valibot, and ArkType implement Standard Schema; tRPC and TanStack consume it). That's exactly the bet here. `standard-tool` is not a competing framework: it has no runtime to adopt and no lock-in, it just rides those same conventions one level up. The surface area to "win" is tiny, because it's a type, not a platform. The honest concession is that it still adds one more shape to the pile, and that only pays off with adoption it does not yet have.
+Adoption ([XKCD 927](https://xkcd.com/927/)). A shape that nobody else produces or consumes is just a tidy wrapper for its author, and today that's roughly where `standard-tool` sits. The bet is that the shape is obvious enough to make adapters trivial, and that Standard Schema shows a neutral interface can spread by adoption rather than mandate. Worth noting that "Standard Schema" and "Standard JSON Schema" aren't ratified standards either; they're conventions that won by adoption (Zod, Valibot, and ArkType implement Standard Schema; tRPC and TanStack consume it), which is the same path this would have to walk. There's no runtime and no lock-in, so the surface area to "win" is small, but it's still one more shape on the pile until others pick it up. This is the honest weak point.
 
-Standard JSON Schema is new. Standard Schema is broadly adopted; Standard JSON Schema, the emission half, is more recent and less proven. Building on it is a bet. The mitigant is that it's a vendored interface, not a dependency, so if it stalls, consumers aren't broken, and the validators already ship the implementations. But "the foundation is young" is a fair criticism.
+Why not just extend an existing tool primitive? Mastra's `createTool` and the AI SDK's `tool()` are the closest prior art. The catch (§2.2) is that each is bundled inside a framework and returns a framework-coupled value: there's no `createTool` without `@mastra/core` (about 50 MB), no `defineTool` without a live `genkit()` instance, no `tool()` without `@langchain/core` or `ai`. The neutral, zero-dependency slot is empty. The nearest neutral thing is MCP's `Tool`, but that's a wire format with no in-process validation or `execute`. If the ecosystem would rather extend one framework's primitive instead, that's a fine outcome; this exists mainly to make the neutral option concrete enough to argue about.
 
-One emitted schema may not fit all providers. §2.1 showed strict mode and the OpenAPI-3.0 subset diverging. `standard-tool` doesn't solve dialects; it delegates them to the schema library via the `target` option (`'openapi-3.0'`, `'draft-07'`, and so on). That's the right layer, but it means correct output still depends on the validator's emitter quality and on the caller picking the right target. It is not a magic "write once, runs on every provider" guarantee.
+`meta` is typed `any`. Per-call context (`execute(input, meta)`) is `any` rather than a typed generic, because tools are invoked by a model or runtime, not hand-called in typed code, so a stricter type bought friction without real safety. It's still a hole in an otherwise type-safe surface, and plenty of people will prefer `unknown`.
 
-`execute` returning a formatted output couples authoring with presentation. Folding result-formatting (`{ error }` envelopes, MCP content blocks) into the tool object is convenient but opinionated; purists may want `execute` to return raw data and format elsewhere. The design answers this with a pluggable `formatOutput`, but the coupling is a deliberate, debatable choice.
-
-`outputSchema` is rarely consumed. Most provider APIs ignore output schemas today; only MCP-style clients validate them. So `outputSchema` is mostly for your own runtime safety and documentation, not the model, which arguably makes it feel premature. The counter is that runtime output validation is valuable on its own, and MCP adoption is rising.
-
-`meta` is typed `any`. Per-call context (`execute(input, meta)`) is intentionally `any` rather than a typed generic, because tools are invoked by a model or runtime, not hand-called in typed code, so narrowing bought friction without real safety. Defensible, but it is a hole in an otherwise type-safe surface, and reasonable people will prefer `unknown`.
-
-Adoption is the whole game. A "convention" that nobody else produces or consumes is just a tidy wrapper for its author. Today `standard-tool` is closer to the latter. Its bet is that the shape is obvious enough that adapters are trivial, and that the Standard Schema precedent shows neutral interfaces can spread. Unproven.
-
-Why not just extend Mastra's `createTool` or the AI SDK's `tool()`? They're the closest prior art, but every one is bundled inside a framework and returns a framework-coupled object (§2.2): you can't get Mastra's `createTool` without `@mastra/core` (about 50 MB), Genkit's `defineTool` without a live `genkit()` instance, LangChain's `tool()` without `@langchain/core`, or the AI SDK's `tool()` without `ai`. The "neutral, zero-dep tool definition" slot is, as far as this survey found, empty: the framework-agnostic libraries that exist are LLM clients (unified call APIs) that bundle tool support, not portable tool definitions. The honest caveat is that the closest thing to a neutral standard is MCP's `Tool` JSON shape, but that's a wire format, with no in-process authoring, validation, or `execute`. If the ecosystem would rather converge on extending one of the framework primitives, that's a legitimate outcome; this proposal exists to make the neutral, dependency-free option concrete enough to argue about.
+`outputSchema` is rarely consumed. Most provider APIs ignore output schemas; only MCP-style clients validate them. So today it earns its place through your own runtime safety and documentation, not the model.
 
 ---
 
@@ -319,17 +311,10 @@ Why not just extend Mastra's `createTool` or the AI SDK's `tool()`? They're the 
 - Not a schema library. It consumes Standard Schema; it doesn't validate or emit JSON Schema itself.
 - Not an orchestration framework. No registries, retries, or routing; bring your own.
 
-## 8. When you do not need it
-
-- You're committed to a single framework end-to-end and never leave it: use that framework's tool primitive.
-- You target exactly one provider and don't want validation: hand-write the JSON Schema, it's a few lines.
-- Your tools aren't reused across apps or runtimes: the portability payoff is small.
-
-## 9. Open questions
+## 8. Open questions
 
 - Should `meta` be `unknown` (safer) or `any` (frictionless)? Currently `any`, since tools are invoked by a model or runtime, not hand-called in typed code.
 - Should result-formatting live in the tool at all, or always be a separate step?
-- What's the minimal adapter set (provider loop, MCP, AI SDK, LangChain) that would make adoption real, and should those ship as separate tiny packages or be left to consumers?
 
 ---
 

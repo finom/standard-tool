@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Overview · standard-tool</title>
-<meta name="description" content="Why standard-tool exists: the landscape, the diagnosis, and the case for a neutral tool type.">
-<meta property="og:title" content="Overview · standard-tool">
-<meta property="og:description" content="Why standard-tool exists: the landscape, the diagnosis, and the case for a neutral tool type.">
+<title>Overview · StandardTool</title>
+<meta name="description" content="Why StandardTool exists: the landscape, the diagnosis, and the case for a neutral tool type.">
+<meta property="og:title" content="Overview · StandardTool">
+<meta property="og:description" content="Why StandardTool exists: the landscape, the diagnosis, and the case for a neutral tool type.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%2309090b'/><text x='8' y='12' font-size='10' text-anchor='middle' fill='%23fafafa' font-family='monospace'>%7B%7D</text></svg>">
 <style>:root{--bg:#09090b;--bg-deep:#030712;--fg:#fafafa;--muted:#a1a1aa;--border:#6b7280;--line:#27272a;--mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
 *{box-sizing:border-box}
@@ -66,16 +66,16 @@ footer a:hover{color:var(--fg)}
 <body>
 <div class="wrap">
 <header class="nav">
-<a class="brand" href="./">standard-tool</a>
+<a class="brand" href="./">StandardTool</a>
 <nav class="nav-links"><a class="btn" href="./">README</a><a class="btn" href="https://github.com/finom/standard-tool">GitHub</a><a class="btn" href="https://www.npmjs.com/package/standard-tool">npm</a></nav>
 </header>
 <main class="md">
-<h1 dir="auto" id="overview-why-standard-tool">Overview: why <code class="notranslate">standard-tool</code></h1>
+<h1 dir="auto" id="overview-why-standardtool">Overview: why StandardTool</h1>
 <blockquote>
-<p dir="auto"><strong>Status: proposal (RFC).</strong> This document is the rationale behind <code class="notranslate">standard-tool</code>. It argues a position, names the trade-offs honestly, and tries to survey the whole landscape rather than one happy path. If it's wrong somewhere, that's the feedback worth opening an issue over.</p>
+<p dir="auto"><strong>Status: proposal (RFC).</strong> This document is the rationale behind StandardTool. It argues a position, names the trade-offs honestly, and tries to survey the whole landscape rather than one happy path. If it's wrong somewhere, that's the feedback worth opening an issue over.</p>
 </blockquote>
 <h2 dir="auto" id="tldr">TL;DR</h2>
-<p dir="auto">Every LLM and agent ecosystem defines its own tool object: a name, a description, an input schema, sometimes an output schema, and a function to run. The shapes are all different, none is portable, and most are welded to a framework or a vendor SDK. Yet the genuinely hard part of a tool definition, schema interop, has already been handled. <a href="https://standardschema.dev" rel="nofollow">Standard Schema</a> unifies validation, and <a href="https://standardschema.dev/json-schema" rel="nofollow">Standard JSON Schema</a> unifies JSON Schema emission. <code class="notranslate">standard-tool</code> is the small missing piece on top of those two: a neutral, dependency-free tool shape that any library, framework, or app can produce or consume.</p>
+<p dir="auto">Every LLM and agent ecosystem defines its own tool object: a name, a description, an input schema, sometimes an output schema, and a function to run. The shapes are all different, none is portable, and most are welded to a framework or a vendor SDK. Yet the genuinely hard part of a tool definition, schema interop, has already been handled. <a href="https://standardschema.dev" rel="nofollow">Standard Schema</a> unifies validation, and <a href="https://standardschema.dev/json-schema" rel="nofollow">Standard JSON Schema</a> unifies JSON Schema emission. StandardTool is the small missing piece on top of those two: a neutral, dependency-free tool shape that any library, framework, or app can produce or consume.</p>
 <p dir="auto">It is deliberately not a framework. It owns the shape, <code class="notranslate">{ name, title?, description, inputSchema?, outputSchema?, execute }</code>, and nothing else.</p>
 <hr>
 <h2 dir="auto" id="1-the-anatomy-of-a-tool">1. The anatomy of a "tool"</h2>
@@ -284,7 +284,7 @@ footer a:hover{color:var(--fg)}
 <td>Zod / inferred</td>
 </tr>
 <tr>
-<td><code class="notranslate">standard-tool</code></td>
+<td>StandardTool</td>
 <td>✅</td>
 <td>✅</td>
 <td><code class="notranslate">inputSchema</code></td>
@@ -334,9 +334,9 @@ footer a:hover{color:var(--fg)}
 <li>The envelope is not, and it's the easy part. A tool is <code class="notranslate">name + description + (input/output schema) + execute</code>. Once the schemas are Standard (JSON) Schema objects, the rest is a string, a string, and a function.</li>
 </ul>
 <p dir="auto">So the situation is the inverse of where effort is being spent. Frameworks pour energy into re-inventing the trivial wrapper and binding it to their runtime, while the part that could justify a framework (schema interop) is already a shared, neutral interface.</p>
-<p dir="auto"><code class="notranslate">standard-tool</code> applies the Standard Schema move one level up: standardize the envelope too, as a neutral interface with no runtime and no dependencies, so a tool authored once can be produced or consumed by anything.</p>
+<p dir="auto">StandardTool applies the Standard Schema move one level up: standardize the envelope too, as a neutral interface with no runtime and no dependencies, so a tool authored once can be produced or consumed by anything.</p>
 <hr>
-<h2 dir="auto" id="4-what-standard-tool-proposes">4. What <code class="notranslate">standard-tool</code> proposes</h2>
+<h2 dir="auto" id="4-what-standardtool-proposes">4. What StandardTool proposes</h2>
 <p dir="auto">One shape:</p>
 <div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">interface</span> <span class="pl-smi">StandardTool</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span><span class="pl-kos">,</span> <span class="pl-smi">FormattedOutput</span><span class="pl-kos">,</span> <span class="pl-c">/* meta is any */</span><span class="pl-c1">&gt;</span> <span class="pl-kos">{</span>
   <span class="pl-c1">name</span>: <span class="pl-smi">string</span><span class="pl-kos">;</span>
@@ -347,10 +347,10 @@ footer a:hover{color:var(--fg)}
   <span class="pl-c1">execute</span><span class="pl-kos">(</span><span class="pl-s1">input</span>: <span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-s1">meta</span>?: <span class="pl-smi">any</span><span class="pl-kos">)</span>: <span class="pl-smi">FormattedOutput</span> <span class="pl-c1">|</span> <span class="pl-smi">Promise</span><span class="pl-c1">&lt;</span><span class="pl-smi">FormattedOutput</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>
 <span class="pl-kos">}</span></pre></div>
 <p dir="auto">Here, <code class="notranslate">CombinedSpec</code> means "a schema that both validates and emits JSON Schema": Zod 4.2+, ArkType 2.1.28+, or Valibot (with <code class="notranslate">@valibot/to-json-schema</code>). The spec interfaces are vendored (copied in), so the package has zero dependencies and can equally be pasted into a project.</p>
-<p dir="auto">The type is the proposal. Like Standard Schema, <code class="notranslate">standard-tool</code> is fundamentally this interface: anything that produces or consumes a matching object interoperates, with no dependency. The <code class="notranslate">standardTool()</code> function used throughout is a reference implementation, a convenient way to build a conforming tool with validation and output formatting, not a required runtime.</p>
+<p dir="auto">The type is the proposal. Like Standard Schema, StandardTool is fundamentally this interface: anything that produces or consumes a matching object interoperates, with no dependency. The <code class="notranslate">standardTool()</code> function used throughout is a reference implementation, a convenient way to build a conforming tool with validation and output formatting, not a required runtime.</p>
 <p dir="auto"><code class="notranslate">execute</code> validates input, runs your logic, validates output, then formats the result. By default, errors become <code class="notranslate">{ error }</code> so a model loop keeps running. The schemas are returned untouched, so any consumer can reach JSON Schema synchronously:</p>
 <div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-c1">!</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// or 'openapi-3.0', 'draft-07'</span></pre></div>
-<p dir="auto">Note that the shape maps almost 1:1 onto MCP's <code class="notranslate">Tool</code> (<code class="notranslate">name</code>, <code class="notranslate">title</code>, <code class="notranslate">description</code>, <code class="notranslate">inputSchema</code>, <code class="notranslate">outputSchema</code>), which is why a <code class="notranslate">standard-tool</code> plugs into an MCP server with no translation, and into provider APIs with a one-line <code class="notranslate">.map</code>.</p>
+<p dir="auto">Note that the shape maps almost 1:1 onto MCP's <code class="notranslate">Tool</code> (<code class="notranslate">name</code>, <code class="notranslate">title</code>, <code class="notranslate">description</code>, <code class="notranslate">inputSchema</code>, <code class="notranslate">outputSchema</code>), which is why a StandardTool plugs into an MCP server with no translation, and into provider APIs with a one-line <code class="notranslate">.map</code>.</p>
 <hr>
 <h2 dir="auto" id="5-worked-examples-one-tool-many-consumers">5. Worked examples: one tool, many consumers</h2>
 <p dir="auto">The point of a neutral shape is that the same object flows everywhere. Define once:</p>
@@ -390,12 +390,12 @@ footer a:hover{color:var(--fg)}
 <p dir="auto">(d) An isolated unit test. No model, no framework, just data in and out:</p>
 <div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-en">expect</span><span class="pl-kos">(</span><span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">toEqual</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-c1">21</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
 <span class="pl-en">expect</span><span class="pl-kos">(</span><span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-c1">123</span> <span class="pl-k">as</span> <span class="pl-smi">any</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">toMatchObject</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">error</span>: <span class="pl-s1">expect</span><span class="pl-kos">.</span><span class="pl-en">any</span><span class="pl-kos">(</span><span class="pl-v">String</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
-<p dir="auto">(e) Derived from an existing API. A derive-from-API layer can emit <code class="notranslate">standard-tool</code>-shaped objects from typed RPC procedures or imported OpenAPI specs, so an existing backend becomes a tool catalog without hand-writing wrappers.</p>
+<p dir="auto">(e) Derived from an existing API. A derive-from-API layer can emit StandardTool-shaped objects from typed RPC procedures or imported OpenAPI specs, so an existing backend becomes a tool catalog without hand-writing wrappers.</p>
 <p dir="auto">Broaden the lens and the same shape underwrites a shareable tool registry (publish reusable tools as plain objects, not framework plugins), cross-runtime use (zero deps, so it runs in the browser, on the edge, in workers), and multi-target apps that must speak to several providers and an MCP endpoint from one definition.</p>
 <hr>
 <h2 dir="auto" id="6-the-case-against">6. The case against</h2>
 <p dir="auto">The objections worth taking seriously:</p>
-<p dir="auto">Adoption (<a href="https://xkcd.com/927/" rel="nofollow">XKCD 927</a>). A shape that nobody else produces or consumes is just a tidy wrapper for its author, and today that's roughly where <code class="notranslate">standard-tool</code> sits. The bet is that the shape is obvious enough to make adapters trivial, and that Standard Schema shows a neutral interface can spread by adoption rather than mandate. Worth noting that "Standard Schema" and "Standard JSON Schema" aren't ratified standards either; they're conventions that won by adoption (Zod, Valibot, and ArkType implement Standard Schema; tRPC and TanStack consume it), which is the same path this would have to walk. There's no runtime and no lock-in, so the surface area to "win" is small, but it's still one more shape on the pile until others pick it up. This is the honest weak point.</p>
+<p dir="auto">Adoption (<a href="https://xkcd.com/927/" rel="nofollow">XKCD 927</a>). A shape that nobody else produces or consumes is just a tidy wrapper for its author, and today that's roughly where StandardTool sits. The bet is that the shape is obvious enough to make adapters trivial, and that Standard Schema shows a neutral interface can spread by adoption rather than mandate. Worth noting that "Standard Schema" and "Standard JSON Schema" aren't ratified standards either; they're conventions that won by adoption (Zod, Valibot, and ArkType implement Standard Schema; tRPC and TanStack consume it), which is the same path this would have to walk. There's no runtime and no lock-in, so the surface area to "win" is small, but it's still one more shape on the pile until others pick it up. This is the honest weak point.</p>
 <p dir="auto">Why not just extend an existing tool primitive? Mastra's <code class="notranslate">createTool</code> and the AI SDK's <code class="notranslate">tool()</code> are the closest prior art. The catch (§2.2) is that each is bundled inside a framework and returns a framework-coupled value: there's no <code class="notranslate">createTool</code> without <code class="notranslate">@mastra/core</code> (about 50 MB), no <code class="notranslate">defineTool</code> without a live <code class="notranslate">genkit()</code> instance, no <code class="notranslate">tool()</code> without <code class="notranslate">@langchain/core</code> or <code class="notranslate">ai</code>. The neutral, zero-dependency slot is empty. The nearest neutral thing is MCP's <code class="notranslate">Tool</code>, but that's a wire format with no in-process validation or <code class="notranslate">execute</code>. If the ecosystem would rather extend one framework's primitive instead, that's a fine outcome; this exists mainly to make the neutral option concrete enough to argue about.</p>
 <p dir="auto"><code class="notranslate">meta</code> is typed <code class="notranslate">any</code>. Per-call context (<code class="notranslate">execute(input, meta)</code>) is <code class="notranslate">any</code> rather than a typed generic, because tools are invoked by a model or runtime, not hand-called in typed code, so a stricter type bought friction without real safety. It's still a hole in an otherwise type-safe surface, and plenty of people will prefer <code class="notranslate">unknown</code>.</p>
 <p dir="auto"><code class="notranslate">outputSchema</code> is rarely consumed. Most provider APIs ignore output schemas; only MCP-style clients validate them. So today it earns its place through your own runtime safety and documentation, not the model.</p>
@@ -404,7 +404,7 @@ footer a:hover{color:var(--fg)}
 <ul dir="auto">
 <li>Not an agent runtime. It doesn't loop, plan, or call a model.</li>
 <li>Not a model client. No HTTP, no provider SDKs.</li>
-<li>Not a transport or protocol. MCP defines how tools are served over a wire; <code class="notranslate">standard-tool</code> defines how a tool is shaped in memory. They're complementary, and a <code class="notranslate">standard-tool</code> is trivially served via MCP.</li>
+<li>Not a transport or protocol. MCP defines how tools are served over a wire; StandardTool defines how a tool is shaped in memory. They're complementary, and a StandardTool is trivially served via MCP.</li>
 <li>Not a schema library. It consumes Standard Schema; it doesn't validate or emit JSON Schema itself.</li>
 <li>Not an orchestration framework. No registries, retries, or routing; bring your own.</li>
 </ul>

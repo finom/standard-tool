@@ -1,10 +1,10 @@
-# Overview: why `standard-tool`
+# Overview: why StandardTool
 
-> **Status: proposal (RFC).** This document is the rationale behind `standard-tool`. It argues a position, names the trade-offs honestly, and tries to survey the whole landscape rather than one happy path. If it's wrong somewhere, that's the feedback worth opening an issue over.
+> **Status: proposal (RFC).** This document is the rationale behind StandardTool. It argues a position, names the trade-offs honestly, and tries to survey the whole landscape rather than one happy path. If it's wrong somewhere, that's the feedback worth opening an issue over.
 
 ## TL;DR
 
-Every LLM and agent ecosystem defines its own tool object: a name, a description, an input schema, sometimes an output schema, and a function to run. The shapes are all different, none is portable, and most are welded to a framework or a vendor SDK. Yet the genuinely hard part of a tool definition, schema interop, has already been handled. [Standard Schema](https://standardschema.dev) unifies validation, and [Standard JSON Schema](https://standardschema.dev/json-schema) unifies JSON Schema emission. `standard-tool` is the small missing piece on top of those two: a neutral, dependency-free tool shape that any library, framework, or app can produce or consume.
+Every LLM and agent ecosystem defines its own tool object: a name, a description, an input schema, sometimes an output schema, and a function to run. The shapes are all different, none is portable, and most are welded to a framework or a vendor SDK. Yet the genuinely hard part of a tool definition, schema interop, has already been handled. [Standard Schema](https://standardschema.dev) unifies validation, and [Standard JSON Schema](https://standardschema.dev/json-schema) unifies JSON Schema emission. StandardTool is the small missing piece on top of those two: a neutral, dependency-free tool shape that any library, framework, or app can produce or consume.
 
 It is deliberately not a framework. It owns the shape, `{ name, title?, description, inputSchema?, outputSchema?, execute }`, and nothing else.
 
@@ -148,7 +148,7 @@ A compact cross-section:
 | Mastra | `id` | ✅ | `inputSchema` | `outputSchema` | `execute` | n/a | Standard JSON Schema |
 | Genkit | ✅ | ✅ | `inputSchema` | `outputSchema` | fn | n/a | Zod |
 | LangChain | ✅ | ✅ | `schema` | n/a | fn | n/a | Zod / inferred |
-| `standard-tool` | ✅ | ✅ | `inputSchema` | `outputSchema` | `execute` | `title` | Standard (JSON) Schema |
+| StandardTool | ✅ | ✅ | `inputSchema` | `outputSchema` | `execute` | `title` | Standard (JSON) Schema |
 
 The columns are nearly identical; the objects are mutually incompatible. And here's the part worth dwelling on: none of these tool primitives is obtainable on its own. Each ships inside a framework package and returns a framework-coupled value.
 
@@ -191,11 +191,11 @@ Put §2.2 and §2.3 next to each other and the picture is stark.
 
 So the situation is the inverse of where effort is being spent. Frameworks pour energy into re-inventing the trivial wrapper and binding it to their runtime, while the part that could justify a framework (schema interop) is already a shared, neutral interface.
 
-`standard-tool` applies the Standard Schema move one level up: standardize the envelope too, as a neutral interface with no runtime and no dependencies, so a tool authored once can be produced or consumed by anything.
+StandardTool applies the Standard Schema move one level up: standardize the envelope too, as a neutral interface with no runtime and no dependencies, so a tool authored once can be produced or consumed by anything.
 
 ---
 
-## 4. What `standard-tool` proposes
+## 4. What StandardTool proposes
 
 One shape:
 
@@ -212,7 +212,7 @@ interface StandardTool<Input, Output, FormattedOutput, /* meta is any */> {
 
 Here, `CombinedSpec` means "a schema that both validates and emits JSON Schema": Zod 4.2+, ArkType 2.1.28+, or Valibot (with `@valibot/to-json-schema`). The spec interfaces are vendored (copied in), so the package has zero dependencies and can equally be pasted into a project.
 
-The type is the proposal. Like Standard Schema, `standard-tool` is fundamentally this interface: anything that produces or consumes a matching object interoperates, with no dependency. The `standardTool()` function used throughout is a reference implementation, a convenient way to build a conforming tool with validation and output formatting, not a required runtime.
+The type is the proposal. Like Standard Schema, StandardTool is fundamentally this interface: anything that produces or consumes a matching object interoperates, with no dependency. The `standardTool()` function used throughout is a reference implementation, a convenient way to build a conforming tool with validation and output formatting, not a required runtime.
 
 `execute` validates input, runs your logic, validates output, then formats the result. By default, errors become `{ error }` so a model loop keeps running. The schemas are returned untouched, so any consumer can reach JSON Schema synchronously:
 
@@ -220,7 +220,7 @@ The type is the proposal. Like Standard Schema, `standard-tool` is fundamentally
 tool.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' }); // or 'openapi-3.0', 'draft-07'
 ```
 
-Note that the shape maps almost 1:1 onto MCP's `Tool` (`name`, `title`, `description`, `inputSchema`, `outputSchema`), which is why a `standard-tool` plugs into an MCP server with no translation, and into provider APIs with a one-line `.map`.
+Note that the shape maps almost 1:1 onto MCP's `Tool` (`name`, `title`, `description`, `inputSchema`, `outputSchema`), which is why a StandardTool plugs into an MCP server with no translation, and into provider APIs with a one-line `.map`.
 
 ---
 
@@ -283,7 +283,7 @@ expect(await getWeather.execute({ city: 'Paris' })).toEqual({ tempC: 21 });
 expect(await getWeather.execute({ city: 123 as any })).toMatchObject({ error: expect.any(String) });
 ```
 
-(e) Derived from an existing API. A derive-from-API layer can emit `standard-tool`-shaped objects from typed RPC procedures or imported OpenAPI specs, so an existing backend becomes a tool catalog without hand-writing wrappers.
+(e) Derived from an existing API. A derive-from-API layer can emit StandardTool-shaped objects from typed RPC procedures or imported OpenAPI specs, so an existing backend becomes a tool catalog without hand-writing wrappers.
 
 Broaden the lens and the same shape underwrites a shareable tool registry (publish reusable tools as plain objects, not framework plugins), cross-runtime use (zero deps, so it runs in the browser, on the edge, in workers), and multi-target apps that must speak to several providers and an MCP endpoint from one definition.
 
@@ -293,7 +293,7 @@ Broaden the lens and the same shape underwrites a shareable tool registry (publi
 
 The objections worth taking seriously:
 
-Adoption ([XKCD 927](https://xkcd.com/927/)). A shape that nobody else produces or consumes is just a tidy wrapper for its author, and today that's roughly where `standard-tool` sits. The bet is that the shape is obvious enough to make adapters trivial, and that Standard Schema shows a neutral interface can spread by adoption rather than mandate. Worth noting that "Standard Schema" and "Standard JSON Schema" aren't ratified standards either; they're conventions that won by adoption (Zod, Valibot, and ArkType implement Standard Schema; tRPC and TanStack consume it), which is the same path this would have to walk. There's no runtime and no lock-in, so the surface area to "win" is small, but it's still one more shape on the pile until others pick it up. This is the honest weak point.
+Adoption ([XKCD 927](https://xkcd.com/927/)). A shape that nobody else produces or consumes is just a tidy wrapper for its author, and today that's roughly where StandardTool sits. The bet is that the shape is obvious enough to make adapters trivial, and that Standard Schema shows a neutral interface can spread by adoption rather than mandate. Worth noting that "Standard Schema" and "Standard JSON Schema" aren't ratified standards either; they're conventions that won by adoption (Zod, Valibot, and ArkType implement Standard Schema; tRPC and TanStack consume it), which is the same path this would have to walk. There's no runtime and no lock-in, so the surface area to "win" is small, but it's still one more shape on the pile until others pick it up. This is the honest weak point.
 
 Why not just extend an existing tool primitive? Mastra's `createTool` and the AI SDK's `tool()` are the closest prior art. The catch (§2.2) is that each is bundled inside a framework and returns a framework-coupled value: there's no `createTool` without `@mastra/core` (about 50 MB), no `defineTool` without a live `genkit()` instance, no `tool()` without `@langchain/core` or `ai`. The neutral, zero-dependency slot is empty. The nearest neutral thing is MCP's `Tool`, but that's a wire format with no in-process validation or `execute`. If the ecosystem would rather extend one framework's primitive instead, that's a fine outcome; this exists mainly to make the neutral option concrete enough to argue about.
 
@@ -307,7 +307,7 @@ Why not just extend an existing tool primitive? Mastra's `createTool` and the AI
 
 - Not an agent runtime. It doesn't loop, plan, or call a model.
 - Not a model client. No HTTP, no provider SDKs.
-- Not a transport or protocol. MCP defines how tools are served over a wire; `standard-tool` defines how a tool is shaped in memory. They're complementary, and a `standard-tool` is trivially served via MCP.
+- Not a transport or protocol. MCP defines how tools are served over a wire; StandardTool defines how a tool is shaped in memory. They're complementary, and a StandardTool is trivially served via MCP.
 - Not a schema library. It consumes Standard Schema; it doesn't validate or emit JSON Schema itself.
 - Not an orchestration framework. No registries, retries, or routing; bring your own.
 

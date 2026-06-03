@@ -61,7 +61,7 @@ const res = await client.chat.completions.create({
 messages.push(res.choices[0].message);
 for (const call of res.choices[0].message.tool_calls ?? []) {
   if (call.type !== 'function' || call.function.name !== getWeather.name) continue;
-  // execute is the only validation — OpenAI doesn't check args; bad args come back as { error }
+  // execute is the only validation — OpenAI doesn't check args; schema-invalid args come back as { error }
   const result = await getWeather.formatted().execute(JSON.parse(call.function.arguments));
   messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
 }
@@ -189,7 +189,7 @@ A StandardTool maps onto the Model Context Protocol with the same two parts:
 ## Notes
 
 - **Validate once.** OpenAI and Anthropic don't check tool arguments against your schema, so `execute` is the validation — that's why the examples call it on the model's raw args. A framework that *does* validate from the schema would validate twice if `execute` also ran; pass the JSON Schema through `jsonSchema()` with no validator (as in the Vercel example) so the framework only describes the tool and `execute` validates once.
-- **Errors as data.** `execute` throws on a bad argument or result; `formatted().execute` returns `{ error }` instead. In a model loop you usually want the latter, so one malformed call goes back to the model to fix rather than throwing.
+- **Errors as data.** `execute` throws on a schema-invalid argument or result; `formatted().execute` returns `{ error }` instead, so an invalid argument goes back to the model to fix. `JSON.parse` runs before `execute`, so guard it if the model might emit invalid JSON syntax — that throws before `execute` can turn it into `{ error }`.
 - **JSON Schema targets.** `{ target: 'draft-2020-12' }` fits OpenAI and Anthropic; use `'openapi-3.0'` for consumers that want the OpenAPI subset (such as Gemini), or `'draft-07'`.
 - **Per-call context.** Pass data the model shouldn't see (an auth token, tenant, locale) as the second argument to `execute(input, meta)`. It's never validated and never in the JSON Schema.
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import { standardTool, formatted, StandardToolValidationError, type StandardTool } from '../dist/index.js';
+import { standardTool, StandardToolValidationError, type StandardTool } from '../dist/index.js';
 
 // Compile-time type assertions (checked by `npm run typecheck`). expectType<T> accepts
 // only `true`, so a wrong type fails to compile. ExecOut<T> = the awaited execute() return;
@@ -54,12 +54,13 @@ weatherStr satisfies StandardTool<{ city: string }, { tempC: number }, string>;
 const weatherAsync = weather.formatted(async (r) => ({ status: r instanceof Error ? r.message : 'ok' }));
 expectType<Equals<ExecOut<typeof weatherAsync>, { status: string }>>();
 
-// per-call meta forwarded to the handler; no outputSchema.
+// per-call meta, narrowed to `{ locale: string }` on the handler (`execute` is a method, so params are
+// bivariant); reading `meta.locale` compiles only because TS keeps that annotation instead of `unknown`.
 const greet = standardTool({
   name: 'greet',
-  description: 'greets with per-call punctuation',
+  description: 'greets a person in the caller-supplied locale',
   inputSchema: z.object({ name: z.string() }),
-  execute: ({ name }, meta: { punct: string }) => `hi ${name}${meta.punct}`,
+  execute: ({ name }, meta: { locale: string }) => (meta.locale === 'fr' ? `bonjour ${name}` : `hi ${name}`),
 });
 expectType<Equals<ExecOut<typeof greet>, string>>();
 
@@ -93,7 +94,8 @@ expectType<Equals<ExecOut<typeof reformatted>, string>>();
 // Runtime behavior. Error assertions check standardTool's prefix and the Standard
 // Schema issue path, not Zod's wording, so they hold across Zod versions.
 
-test('FormattableTool exposes the neutral shape plus executeUnformatted + formatted', () => {
+test('FormattableStandardTool exposes the neutral shape plus executeUnformatted + formatted', () => {
+  // weather declares no title, so the optional key is absent (not set to undefined).
   assert.deepEqual(Object.keys(weather).sort(), [
     'description',
     'execute',
@@ -102,9 +104,8 @@ test('FormattableTool exposes the neutral shape plus executeUnformatted + format
     'inputSchema',
     'name',
     'outputSchema',
-    'title',
   ]);
-  // A FormattableTool still IS a StandardTool — the extra members are additive.
+  // A FormattableStandardTool still IS a StandardTool — the extra members are additive.
   weather satisfies StandardTool<{ city: string }, { tempC: number }>;
 });
 
@@ -112,8 +113,9 @@ test('a neutral tool has the same execute and executeUnformatted', () => {
   assert.equal(weather.execute, weather.executeUnformatted);
 });
 
-test('passes the optional title through (undefined when omitted)', () => {
-  assert.equal(weather.title, undefined); // weather declares no title
+test('passes the optional title through (omitted, not set to undefined, when absent)', () => {
+  assert.equal(weather.title, undefined);
+  assert.equal('title' in weather, false); // absent, not a `title: undefined` key
   const titled = standardTool({ name: 'titled', title: 'Titled Tool', description: 'd', execute: () => 1 });
   assert.equal(titled.title, 'Titled Tool');
 });
@@ -188,10 +190,10 @@ test('optional schemas: validation skipped when omitted', async () => {
 });
 
 test('forwards the per-call meta argument verbatim to the handler', async () => {
-  assert.equal(await greet.execute({ name: 'Ada' }, { punct: '!' }), 'hi Ada!');
+  assert.equal(await greet.execute({ name: 'Ada' }, { locale: 'en' }), 'hi Ada');
   // meta still reaches the handler after formatting (it flows through executeUnformatted).
-  assert.equal(await greet.formatted().execute({ name: 'Bob' }, { punct: '?' }), 'hi Bob?');
-  assert.equal(await greet.executeUnformatted({ name: 'Cy' }, { punct: '.' }), 'hi Cy.');
+  assert.equal(await greet.formatted().execute({ name: 'Bob' }, { locale: 'fr' }), 'bonjour Bob');
+  assert.equal(await greet.executeUnformatted({ name: 'Cy' }, { locale: 'fr' }), 'bonjour Cy');
 });
 
 test('default generics: bare StandardTool needs no type args and holds heterogeneous tools', () => {
@@ -262,19 +264,6 @@ test('the headline case: a framework ships a pre-formatted tool, a consumer re-t
   assert.equal(await retargeted.execute({ city: 'Paris' }), 'ok: 21');
   // …or just takes the raw Output.
   assert.deepEqual(await shipped.executeUnformatted({ city: 'Paris' }), { tempC: 21 });
-});
-
-test('free formatted(tool, fmt) formats a neutral tool; no fmt → default envelope', async () => {
-  assert.equal(await formatted(weather, toStr).execute({ city: 'Paris' }), 'ok: 21');
-  const enveloped = formatted(weather);
-  assert.deepEqual(await enveloped.execute({ city: 'Paris' }), { tempC: 21 });
-  const out = await enveloped.execute({ city: 123 } as unknown as { city: string });
-  assert.deepEqual(Object.keys(out), ['error']);
-});
-
-test('free formatted() returns a re-formattable tool that re-derives from the raw', async () => {
-  const out = await formatted(weather, toMcpResult).formatted(toStr).execute({ city: 'Paris' });
-  assert.equal(out, 'ok: 21');
 });
 
 test('MCP formatter: object output → JSON text block + structuredContent', async () => {

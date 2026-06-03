@@ -1,7 +1,5 @@
 # Overview: why StandardTool
 
-> 🚧 **Work in progress — not ready to present.** The core API (how tools validate and format their I/O) is being actively redesigned and will change. Don't build on the current shape yet.
-
 > **Status: proposal (RFC).** This document is the rationale behind StandardTool. It argues a position, names the trade-offs honestly, and tries to survey the whole landscape rather than one happy path. If it's wrong somewhere, that's the feedback worth opening an issue over.
 
 ## TL;DR
@@ -202,19 +200,19 @@ StandardTool applies the Standard Schema move one level up: standardize the enve
 One shape:
 
 ```ts
-interface StandardTool<Input, Output, FormattedOutput = Output, /* meta is any */> {
+interface StandardTool<Input, Output, FormattedOutput = Output> {
   name: string;
   title?: string;                                  // human label; used by MCP-style clients
   description: string;
   inputSchema?:  CombinedSpec<Input>;              // Standard Schema + Standard JSON Schema
   outputSchema?: CombinedSpec<Output>;
-  execute(input: Input, meta?: any): FormattedOutput | Promise<FormattedOutput>; // neutral: validated Output, throws
+  execute(input: Input, meta?: unknown): FormattedOutput | Promise<FormattedOutput>; // neutral: validated Output, throws
 }
 ```
 
 Here, `CombinedSpec` means "a schema that both validates and emits JSON Schema": Zod 4.2+, ArkType 2.1.28+, or Valibot (with `@valibot/to-json-schema`). The spec interfaces are vendored (copied in), so the package has zero dependencies and can equally be pasted into a project.
 
-The type is the proposal. Like Standard Schema, StandardTool is fundamentally this interface: anything that produces or consumes a matching object interoperates, with no dependency. The `standardTool()` function used throughout is a reference implementation — a convenient way to build a conforming tool that validates its I/O, with opt-in formatting via `.formatted()`, not a required runtime. Its return value carries two extras beyond the normative type — the unformatted execute and `.formatted()`, so a tool that has been formatted for one consumer can still be re-targeted for another — but the interface above stays formatting-free, so any plain object can satisfy it.
+The type is the proposal. Like Standard Schema, StandardTool is fundamentally this interface: anything that produces or consumes a matching object interoperates, with no dependency. A second type, `FormattableStandardTool`, extends it for the formatting layer — it adds `executeUnformatted` (the raw `Output`, always reachable) and a `.formatted()` method, so a single definition yields a **neutral** tool, a **formatted** tool, or a **re-formatted** one (a tool formatted for one consumer, re-targeted for another). The `standardTool()` *function* is not part of the proposal — it's only a reference implementation, a convenient way to build a conforming `FormattableStandardTool` that validates its I/O. The normative surface is the types, and any plain object can satisfy `StandardTool`.
 
 `execute` validates input, runs your logic, validates output, and returns the validated `Output`, throwing on a violation. Formatting that result for a consumer — turning a failure into `{ error }`, or shaping an MCP envelope — is an opt-in step (`.formatted()`) that lives outside this neutral shape, because formatting is what binds a tool to a particular consumer. The schemas are returned untouched, so any consumer can reach JSON Schema synchronously:
 
@@ -257,15 +255,21 @@ tools: [{
 const result = await getWeather.formatted().execute(JSON.parse(call.arguments)); // validates args + result; bad args → { error }
 ```
 
-(b) An MCP server. Format the tool for MCP with `.formatted()` (so `execute` returns a `{ content, structuredContent, isError }` result), then hand the Standard Schema straight to `registerTool`:
+(b) An MCP server. Format the tool for MCP with `.formatted(toMcpResult)` (so `execute` returns a `{ content, structuredContent, isError }` result), emit the descriptor's JSON Schema for `tools/list`, and return `execute`'s result for `tools/call`:
 
 ```ts
 const mcp = getWeather.formatted(toMcpResult); // toMcpResult: the text-only formatter from the README
-server.registerTool(mcp.name, {
+// tools/list — MCP's Tool is a JSON Schema object, so emit it. (The high-level registerTool helper instead
+// wants a Zod raw shape and would validate a second time; going through JSON Schema stays library-agnostic
+// and leaves execute the single validator.)
+const descriptor = {
+  name: mcp.name,
   title: mcp.title,
   description: mcp.description,
-  inputSchema: mcp.inputSchema, // a Standard Schema; the SDK emits JSON Schema from it
-}, (args) => mcp.execute(args)); // → { content, structuredContent, isError }
+  inputSchema: mcp.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' }),
+};
+// tools/call — execute validates once, then returns the MCP result shape
+const result = await mcp.execute(args); // → { content, structuredContent, isError }
 ```
 
 (c) A Vercel AI SDK adapter. Wrap the neutral shape into `tool()`:
@@ -274,7 +278,7 @@ server.registerTool(mcp.name, {
 import { tool, jsonSchema } from 'ai';
 const aiTool = tool({
   description: getWeather.description,
-  inputSchema: jsonSchema(getWeather.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' })),
+  inputSchema: jsonSchema<{ city: string }>(getWeather.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' })),
   execute: (input) => getWeather.execute(input),
 });
 ```
@@ -301,7 +305,7 @@ Adoption ([XKCD 927](https://xkcd.com/927/)). A shape that nobody else produces 
 
 Why not just extend an existing tool primitive? Mastra's `createTool` and the AI SDK's `tool()` are the closest prior art. The catch (§2.2) is that each is bundled inside a framework and returns a framework-coupled value: there's no `createTool` without `@mastra/core` (about 50 MB), no `defineTool` without a live `genkit()` instance, no `tool()` without `@langchain/core` or `ai`. The neutral, zero-dependency slot is empty. The nearest neutral thing is MCP's `Tool`, but that's a wire format with no in-process validation or `execute`. If the ecosystem would rather extend one framework's primitive instead, that's a fine outcome; this exists mainly to make the neutral option concrete enough to argue about.
 
-`meta` is typed `any`. Per-call context (`execute(input, meta)`) is `any` rather than a typed generic, because tools are invoked by a model or runtime, not hand-called in typed code, so a stricter type bought friction without real safety. It's still a hole in an otherwise type-safe surface, and plenty of people will prefer `unknown`.
+`meta` is unparameterized. Per-call context (`execute(input, meta)`) is `unknown`, not a typed generic, because tools are invoked by a model or runtime, not hand-called in typed code, so threading a `Meta` type param bought friction without much payoff. You annotate it on your handler where you read it; it's the one unparameterized corner of an otherwise typed surface.
 
 `outputSchema` is rarely consumed. Most provider APIs ignore output schemas; only MCP-style clients validate them. So today it earns its place through your own runtime safety and documentation, not the model.
 
@@ -317,8 +321,8 @@ Why not just extend an existing tool primitive? Mastra's `createTool` and the AI
 
 ## 8. Open questions
 
-- Should `meta` be `unknown` (safer) or `any` (frictionless)? Currently `any`, since tools are invoked by a model or runtime, not hand-called in typed code.
-- Should formatting be carried on the tool at all? The reference keeps the normative `StandardTool` formatting-free and puts `.formatted()` plus the carried unformatted execute on `standardTool()`'s richer return, so a neutral tool stays a plain object and a formatted one can still be re-targeted — but whether that belongs on the tool or in a fully separate utility is a judgment call.
+- Should `meta` be a typed `Meta` generic rather than `unknown`? Currently `unknown` — you annotate it on the handler — to keep the inference surface small.
+- Should the formatting layer live on the tool type at all? The normative `StandardTool` stays formatting-free; the separate `FormattableStandardTool` type adds `.formatted()` plus the carried unformatted execute, so a neutral tool is a plain object and a formatted one can still be re-targeted. Whether that belongs on a tool type or in a fully separate utility is a judgment call.
 
 ---
 

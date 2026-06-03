@@ -10,7 +10,7 @@ StandardTool is a common type for defining LLM tools, meant to be produced and c
 
 The goal is to define a tool once and use it anywhere, across providers and frameworks, instead of writing a separate, incompatible tool object for each one. It builds on [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema): the optional `inputSchema` and `outputSchema` both validate their data and emit JSON Schema for the model.
 
-Standard Schema is the shared validation interface that Zod, Valibot, and ArkType implement, and this proposal follows the same idea. It's an interface, not a library you depend on, so you can conform to it with a plain object and zero dependencies. The package also ships a small reference implementation, the `standardTool()` function, which builds a conforming tool with input and output validation and error handling included.
+Standard Schema is the shared validation interface that Zod, Valibot, and ArkType implement, and this proposal follows the same idea. It's an interface, not a library you depend on, so you can conform to it with a plain object and zero dependencies. The package also ships a small reference implementation, the `standardTool()` function, which builds a conforming tool that validates its input and output, plus an opt-in formatting layer (`.formatted()`) for handing the model a consumer-specific result.
 
 ```ts
 import { standardTool } from 'standard-tool';
@@ -24,15 +24,19 @@ const getWeather = standardTool({
   execute: async ({ city }) => ({ tempC: 21 }), // `city` is typed; the return is validated
 });
 
-await getWeather.execute({ city: 'Paris' }); // → { tempC: number } | { error: string }; validated in & out (errors → { error } by default)
+await getWeather.execute({ city: 'Paris' }); // → { tempC: number }; validated in & out, throws on a violation
+
+// opt into a model-facing envelope when you want failures as data, not throws:
+await getWeather.formatted().execute({ city: 'Paris' }); // → { tempC: number } | { error: string }
 ```
 
 ## What it is
 
 - Standalone and dependency-free: a type, plus a small reference implementation of it. The Standard Schema and Standard JSON Schema interfaces are vendored into the package, so installing it pulls in nothing else. You can also copy the source into your project instead (see [below](#or-just-copy-paste-it)).
-- A convention, not a framework: it doesn't run your agent, call your model, or own your runtime. It defines only the shape, `{ name, title?, description, inputSchema?, outputSchema?, execute }`, plus the things every tool needs: validation, a JSON Schema, and a model-facing result.
-- Validates input and output: `execute` accepts untrusted input, such as JSON arguments from a model, and validates it via Standard Schema when you provide a schema (both are optional). It runs your logic, then validates the result. By default a validation failure or a thrown error doesn't propagate; it comes back as `{ error: string }`, so a model loop keeps running. Pass a `formatOutput` to reshape that, or to re-throw.
+- A convention, not a framework: it doesn't run your agent, call your model, or own your runtime. It defines only the shape, `{ name, title?, description, inputSchema?, outputSchema?, execute }`, plus the two things every tool needs from its schemas: validation and a JSON Schema.
+- Validates input and output, and throws by default: `execute` accepts untrusted input, such as JSON arguments from a model, and validates it via Standard Schema when you provide a schema (both are optional). It runs your logic, validates the result, and returns the validated `Output` — throwing on a violation, like a parser would.
 - Emits JSON Schema for any model: because the schemas implement Standard JSON Schema, you get an OpenAI- or MCP-ready JSON Schema synchronously via `inputSchema['~standard'].jsonSchema.input(...)`.
+- Formatting lives outside the standard shape: reshaping the result for a specific consumer (a failure as `{ error }`, an MCP envelope) is what *binds* a tool to that consumer, so it's an explicit, opt-in [`.formatted()`](#formatting-the-result) step rather than baked in. And because the unformatted execute is carried along, a tool a framework formatted for itself can still be re-formatted by you, or read raw.
 
 ## Why
 
@@ -55,10 +59,25 @@ import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/sp
 
 type CombinedSpec<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
 
+/** The default formatter's envelope: the raw `Output`, or `{ error }` on a validation/exec failure. */
 export type DefaultFormattedOutput<Output> = Output | { error: string };
 
-/** A portable LLM tool definition. */
-export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = DefaultFormattedOutput<Output>> {
+/**
+ * Thrown by a neutral tool's `execute`/`executeUnformatted` when input or output validation fails.
+ * Carries the failing side and the Standard Schema issues, so a formatter can build a rich result.
+ */
+export class StandardToolValidationError extends Error {
+  constructor(
+    readonly target: 'input' | 'output',
+    readonly issues: readonly StandardSchemaV1.Issue[]
+  ) {
+    super(`${target} validation failed: ${issues.map((i) => i.message).join('; ')}`);
+    this.name = 'StandardToolValidationError';
+  }
+}
+
+/** A portable LLM tool definition — the standard interchange shape. Neutral form: validates in & out, throws. */
+export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output> {
   name: string;
   title?: string;
   description: string;
@@ -68,8 +87,62 @@ export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput
   execute(input: Input, meta?: any): FormattedOutput | Promise<FormattedOutput>;
 }
 
-/** Reference implementation of the {@link StandardTool} type. */
-export function standardTool<Input = unknown, Output = unknown, FormattedOutput = DefaultFormattedOutput<Output>>(def: {
+/** What `standardTool`/`formatted` return: a `StandardTool` carrying the unformatted execute + `formatted()`. */
+export interface FormattableTool<Input = unknown, Output = unknown, FormattedOutput = Output>
+  extends StandardTool<Input, Output, FormattedOutput> {
+  /** Validate input → run → validate output, returning the raw `Output`. Throws on a violation. */
+  // biome-ignore lint/suspicious/noExplicitAny: per-call context, typed by the handler
+  executeUnformatted(input: Input, meta?: any): Promise<Output>;
+  /** Re-format from the unformatted result. No formatter → the default `{ error }` envelope. */
+  formatted(): FormattableTool<Input, Output, DefaultFormattedOutput<Output>>;
+  formatted<NewFormattedOutput>(
+    format: (result: Output | Error) => NewFormattedOutput | Promise<NewFormattedOutput>
+  ): FormattableTool<Input, Output, NewFormattedOutput>;
+}
+
+type ToolMeta<Input, Output> = Pick<
+  StandardTool<Input, Output>,
+  'name' | 'title' | 'description' | 'inputSchema' | 'outputSchema'
+>;
+
+type Raw<Input, Output> = (input: Input, meta?: unknown) => Output | Promise<Output>;
+type Format<Output, FormattedOutput> = (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>;
+
+const defaultFormat = <Output>(result: Output | Error): DefaultFormattedOutput<Output> =>
+  result instanceof Error ? { error: result.message } : result;
+
+function makeFormattable<Input, Output, FormattedOutput>(
+  base: ToolMeta<Input, Output>,
+  raw: Raw<Input, Output>,
+  format?: Format<Output, FormattedOutput>
+): FormattableTool<Input, Output, FormattedOutput> {
+  const executeUnformatted = async (input: Input, meta?: unknown): Promise<Output> => raw(input, meta);
+  const execute: (input: Input, meta?: unknown) => Promise<FormattedOutput> = format
+    ? async (input, meta) => {
+        let result: Output | Error;
+        try {
+          result = await executeUnformatted(input, meta);
+        } catch (error) {
+          result = error instanceof Error ? error : new Error(String(error));
+        }
+        return format(result);
+      }
+    : (executeUnformatted as unknown as (input: Input, meta?: unknown) => Promise<FormattedOutput>);
+  const tool = {
+    name: base.name,
+    title: base.title,
+    description: base.description,
+    inputSchema: base.inputSchema,
+    outputSchema: base.outputSchema,
+    execute,
+    executeUnformatted,
+    formatted: (next?: Format<Output, unknown>) => makeFormattable(base, raw, next ?? defaultFormat),
+  };
+  return tool as unknown as FormattableTool<Input, Output, FormattedOutput>;
+}
+
+/** Reference implementation of `StandardTool`. Validates input and output, throwing on a violation. */
+export function standardTool<Input = unknown, Output = unknown>(def: {
   name: string;
   title?: string;
   description: string;
@@ -77,29 +150,33 @@ export function standardTool<Input = unknown, Output = unknown, FormattedOutput 
   outputSchema?: CombinedSpec<Output>;
   // biome-ignore lint/suspicious/noExplicitAny: per-call context, typed by the handler
   execute: (input: Input, meta: any) => Output | Promise<Output>;
-  formatOutput?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>;
-}): StandardTool<Input, Output, FormattedOutput> {
-  const formatOutput: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput> =
-    def.formatOutput ??
-    ((result) => (result instanceof Error ? { error: result.message } : result) as unknown as FormattedOutput);
-  return {
-    name: def.name,
-    title: def.title,
-    description: def.description,
-    inputSchema: def.inputSchema,
-    outputSchema: def.outputSchema,
-    async execute(input, meta) {
-      let result: Output | Error;
-      try {
-        const validInput = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
-        const output = await def.execute(validInput, meta);
-        result = def.outputSchema ? await validate('output', def.outputSchema, output) : output;
-      } catch (error) {
-        result = error instanceof Error ? error : new Error(String(error));
-      }
-      return formatOutput(result);
-    },
+}): FormattableTool<Input, Output, Output> {
+  const raw: Raw<Input, Output> = async (input, meta) => {
+    const validInput = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
+    const output = await def.execute(validInput, meta);
+    return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
   };
+  const { name, title, description, inputSchema, outputSchema } = def;
+  return makeFormattable<Input, Output, Output>({ name, title, description, inputSchema, outputSchema }, raw);
+}
+
+/** Wrap a neutral `StandardTool` so `execute` returns a consumer-specific shape (or the `{ error }` envelope). */
+export function formatted<Input, Output>(
+  tool: StandardTool<Input, Output, Output>
+): FormattableTool<Input, Output, DefaultFormattedOutput<Output>>;
+export function formatted<Input, Output, FormattedOutput>(
+  tool: StandardTool<Input, Output, Output>,
+  format: Format<Output, FormattedOutput>
+): FormattableTool<Input, Output, FormattedOutput>;
+export function formatted<Input, Output, FormattedOutput>(
+  tool: StandardTool<Input, Output, Output>,
+  format?: Format<Output, FormattedOutput>
+): FormattableTool<Input, Output, FormattedOutput | DefaultFormattedOutput<Output>> {
+  const carried = (tool as Partial<FormattableTool<Input, Output, Output>>).executeUnformatted;
+  const raw: Raw<Input, Output> = carried ?? ((input, meta) => tool.execute(input, meta));
+  const { name, title, description, inputSchema, outputSchema } = tool;
+  const fmt = (format ?? defaultFormat) as Format<Output, FormattedOutput | DefaultFormattedOutput<Output>>;
+  return makeFormattable({ name, title, description, inputSchema, outputSchema }, raw, fmt);
 }
 
 async function validate<S extends StandardSchemaV1>(
@@ -108,11 +185,7 @@ async function validate<S extends StandardSchemaV1>(
   value: unknown
 ): Promise<StandardSchemaV1.InferOutput<S>> {
   const result = await schema['~standard'].validate(value);
-  if (result.issues) {
-    throw Object.assign(new Error(`${target} validation failed: ${result.issues.map((i) => i.message).join('; ')}`), {
-      issues: result.issues,
-    });
-  }
+  if (result.issues) throw new StandardToolValidationError(target, result.issues);
   return result.value;
 }
 ```
@@ -120,12 +193,14 @@ async function validate<S extends StandardSchemaV1>(
 ## API
 
 ```ts
-import { standardTool, type StandardTool } from 'standard-tool';
+import { standardTool, formatted, type StandardTool, type FormattableTool } from 'standard-tool';
 
-standardTool(def): StandardTool<Input, Output, FormattedOutput>;
+standardTool(def): FormattableTool<Input, Output>;            // neutral: validates in & out, throws on a violation
+tool.formatted(format?): FormattableTool<Input, Output, F>;   // opt into a consumer-specific result (or { error } envelope)
+formatted(tool, format?): FormattableTool<Input, Output, F>;  // the same, as a free function for a tool you didn't make
 ```
 
-`Input` and `Output` are your data types: what your `execute` accepts and returns. The optional schemas describe them. `FormattedOutput` is what the tool hands the model after formatting, `Output | { error: string }` by default. `execute` also takes an optional second `meta` argument, per-call runtime context forwarded verbatim to your handler, never validated and never in the JSON Schema (see [Per-call runtime context](#per-call-runtime-context-meta)).
+`Input` and `Output` are your data types: what your `execute` accepts and returns. The optional schemas describe them. A neutral tool's `execute` validates both, returns the validated `Output`, and throws on a violation. `execute` also takes an optional second `meta` argument — per-call runtime context forwarded verbatim to your handler, never validated and never in the JSON Schema (see [Per-call runtime context](#per-call-runtime-context-meta)).
 
 | field | type | purpose |
 | --- | --- | --- |
@@ -135,12 +210,18 @@ standardTool(def): StandardTool<Input, Output, FormattedOutput>;
 | `inputSchema?` | `CombinedSpec<Input>` | optional input schema; validates and emits JSON Schema |
 | `outputSchema?` | `CombinedSpec<Output>` | optional output schema; validates and emits JSON Schema |
 | `execute` (yours) | `(input: Input, meta: any) => Output \| Promise<Output>` | your logic; receives validated input and the optional per-call `meta`, returns the output |
-| `execute` (tool) | `(input: Input, meta?: any) => FormattedOutput \| Promise<FormattedOutput>` | validate in, run yours (forwarding `meta`), validate out, format; errors become the output (no throw) by default |
-| `formatOutput?` | `(result: Output \| Error) => FormattedOutput` | optional; maps the result (or an `Error` carrying `issues`) to the model output. Default `result instanceof Error ? { error: result.message } : result` |
+| `execute` (tool) | `(input: Input, meta?: any) => Promise<Output>` | validate in, run yours (forwarding `meta`), validate out; returns the validated `Output`, throwing a `StandardToolValidationError` on a violation |
 
 `inputSchema` and `outputSchema` are optional. When present they must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`). `Input` and `Output` are inferred from them, or from `execute` when a schema is omitted.
 
-`standardTool` is deliberately a thin utility. `name`, `description`, `inputSchema`, and `outputSchema` come back exactly as you passed them. Only `execute` is wrapped: it validates input and output when schemas are present, then routes the result (or any thrown error, since a validation failure is a plain `Error` carrying `issues`) through `formatOutput`. `formatOutput` defaults to the `{ error }` envelope, so bad data doesn't throw and a model loop keeps going. Supply your own to reshape the output (its return type becomes the tool's `FormattedOutput`) or to throw and surface the error. Note that `formatOutput` is a creation-time argument, not a field on the returned tool, so the shape stays the minimal `{ name, title?, description, inputSchema?, outputSchema?, execute }`. That's the whole job.
+`StandardTool` — the normative type — stays minimal: `{ name, title?, description, inputSchema?, outputSchema?, execute }`, no methods, so anything can produce or consume one with a plain object and zero dependencies. The reference `standardTool()` returns a `FormattableTool`: that same shape plus two additive members, so a `FormattableTool` is always a valid `StandardTool`.
+
+| member | type | purpose |
+| --- | --- | --- |
+| `executeUnformatted` | `(input: Input, meta?: any) => Promise<Output>` | the validated, throwing, *unformatted* execute. On a neutral tool it is identical to `execute`; formatting keeps it intact, so the raw `Output` stays reachable |
+| `formatted` | `(format?) => FormattableTool<Input, Output, F>` | opt into a consumer-specific result; see [Formatting the result](#formatting-the-result) |
+
+The thrown `StandardToolValidationError` carries `target: 'input' \| 'output'` and the Standard Schema `issues`, so a formatter (or a `catch`) can build a rich result.
 
 ## Usage
 
@@ -156,8 +237,11 @@ const getWeather = standardTool({
   execute: async ({ city }) => ({ tempC: 21 }),
 });
 
-// validated end to end; by default, bad input or output comes back as { error: string } (override via formatOutput):
-const out = await getWeather.execute({ city: 'Paris' }); // { tempC: number } | { error: string }
+// validated end to end; returns the raw Output and throws on bad input or output:
+const out = await getWeather.execute({ city: 'Paris' }); // { tempC: number }
+
+// want failures as data instead of throws? format it (see below):
+const safe = await getWeather.formatted().execute({ city: 'Paris' }); // { tempC: number } | { error: string }
 
 // JSON Schema for the model (Standard JSON Schema), synchronous (inputSchema is optional, hence `!`):
 const parameters = getWeather.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
@@ -182,9 +266,9 @@ await greet.execute({ name: 'Ada' }, { punct: '!' }); // → 'hi Ada!'
 
 Tools that don't need it just call `execute(input)`; `meta` is optional.
 
-## Throwing instead of the `{ error }` envelope
+## Formatting the result
 
-By default a validation failure or a thrown error comes back as `{ error: string }`, so a model loop can keep running. When you'd rather have `execute` throw, for example to let a caller's `try/catch` handle failures, re-throw the `Error` from `formatOutput`:
+A neutral tool throws on a validation failure or a thrown error, and returns its own `Output` otherwise. That's the right default for typed code, but a model loop usually wants a failure to come back as *data* it can self-correct from, and some consumers (MCP) want a specific result envelope. Formatting is how you opt into that, without changing the tool's `Input` or `Output`:
 
 ```ts
 const getWeather = standardTool({
@@ -193,18 +277,39 @@ const getWeather = standardTool({
   inputSchema: z.object({ city: z.string() }),
   outputSchema: z.object({ tempC: z.number() }),
   execute: async ({ city }) => ({ tempC: 21 }),
-  formatOutput: (result) => {
-    if (result instanceof Error) throw result; // validation/exec failures now reject
-    return result;
-  },
 });
 
-await getWeather.execute({ city: 'Paris' }); // { tempC: number }; rejects on bad input/output
+await getWeather.execute({ city: 123 } as never);             // throws StandardToolValidationError
+await getWeather.formatted().execute({ city: 123 } as never); // → { error: 'input validation failed: …' }
 ```
+
+`formatted` takes any `(result: Output | Error) => FormattedOutput`. On success it receives the validated `Output`; on failure an `Error` (a `StandardToolValidationError` for validation failures, carrying `target` and the Standard Schema `issues`). With no formatter, the default `{ error }` envelope is used. The formatter's return type becomes the tool's third generic, `FormattedOutput`:
+
+```ts
+// reshape to anything
+const asText = getWeather.formatted((r) => (r instanceof Error ? `error: ${r.message}` : `${r.tempC}°C`));
+await asText.execute({ city: 'Paris' }); // → '21°C'
+
+// re-throw to keep throwing on failure (the escape hatch back to neutral behavior)
+const strict = getWeather.formatted((r) => {
+  if (r instanceof Error) throw r;
+  return r;
+});
+```
+
+Formatting swaps only that third generic; `Input` and `Output` are untouched, and the validated, unformatted execute is carried along as `executeUnformatted`. So a formatted tool stays re-formattable, and its raw `Output` stays reachable:
+
+```ts
+const enveloped = getWeather.formatted();                     // { error } envelope
+await enveloped.executeUnformatted({ city: 'Paris' });        // → { tempC: 21 } (raw; still validates + throws)
+await enveloped.formatted(asText).execute({ city: 'Paris' }); // → '21°C', re-derived from the raw Output
+```
+
+Re-formatting *replaces*, it doesn't compose: each `formatted()` re-derives from the unformatted result, never from the previous formatting. That's what lets a framework ship a tool pre-formatted for itself while you stay free to re-target it for another consumer — or read the raw `Output`. The free `formatted(tool, format)` does the same for a neutral tool you didn't make.
 
 ## MCP-compatible output
 
-[MCP](https://modelcontextprotocol.io) tools return a structured result envelope, `{ content, structuredContent?, isError? }`, not just raw data. A `formatOutput` can map `execute`'s result onto that shape, so a StandardTool is consumable by an MCP server with no translation. The formatter below is text-only: an object result is JSON-encoded into a text block and also mirrored into `structuredContent` (per MCP's [backwards-compatibility guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), errors come back with `isError: true` (a self-correctable tool error), and image, audio, and resource blocks are out of scope.
+[MCP](https://modelcontextprotocol.io) tools return a structured result envelope, `{ content, structuredContent?, isError? }`, not just raw data. A formatter applied with `.formatted()` maps `execute`'s result onto that shape, so a StandardTool is consumable by an MCP server with no translation. The formatter below is text-only: an object result is JSON-encoded into a text block and also mirrored into `structuredContent` (per MCP's [backwards-compatibility guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), errors come back with `isError: true` (a self-correctable tool error), and image, audio, and resource blocks are out of scope.
 
 ```ts
 type McpToolResult = {
@@ -213,7 +318,7 @@ type McpToolResult = {
   isError?: boolean;
 };
 
-// A plain function; standardTool adapts it (infers FormattedOutput from the return type).
+// A plain function; pass it to .formatted() (which infers FormattedOutput from the return type).
 // `result` is your Output, or an Error (validation/exec failure).
 const toMcpResult = (result: unknown): McpToolResult => {
   if (result instanceof Error) {
@@ -230,7 +335,7 @@ const toMcpResult = (result: unknown): McpToolResult => {
 };
 ```
 
-Wire it in as `formatOutput`, and `execute` returns a value shaped exactly like an MCP `CallToolResult`:
+Apply it with `.formatted()`, and `execute` returns a value shaped exactly like an MCP `CallToolResult`:
 
 ```ts
 const getWeather = standardTool({
@@ -240,8 +345,7 @@ const getWeather = standardTool({
   inputSchema: z.object({ city: z.string() }),
   outputSchema: z.object({ tempC: z.number() }),
   execute: async ({ city }) => ({ tempC: 21 }),
-  formatOutput: toMcpResult,
-});
+}).formatted(toMcpResult);
 
 await getWeather.execute({ city: 'Paris' });
 // → { content: [{ type: 'text', text: '{"tempC":21}' }], structuredContent: { tempC: 21 } }
@@ -254,12 +358,12 @@ That's the exact shape an MCP server returns from a `tools/call` handler, so a S
 
 ## With the OpenAI API
 
-Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). Because every tool is the same neutral shape, you keep them in one array, `.map` it into the request's `tools`, then dispatch each function call back to the matching tool by `name`. Adding a fourth tool is one more array entry, with no special-casing and no per-tool wiring. And because `execute` returns `{ error }` instead of throwing by default, a malformed tool call goes back to the model to self-correct rather than crashing your loop (a custom `formatOutput` can opt back into throwing).
+Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). Because every tool is the same neutral shape, you keep them in one array, `.map` it into the request's `tools`, then dispatch each function call back to the matching tool by `name`. Adding a fourth tool is one more array entry, with no special-casing and no per-tool wiring. And by formatting each tool with the default `{ error }` envelope (`formatted(tool)`), a malformed tool call comes back as data and goes to the model to self-correct rather than crashing your loop.
 
 ```ts
 import OpenAI from 'openai';
 import { z } from 'zod';
-import { standardTool, type StandardTool } from 'standard-tool';
+import { standardTool, formatted, type StandardTool } from 'standard-tool';
 
 const client = new OpenAI();
 
@@ -308,7 +412,7 @@ for (const item of res.output) {
   if (item.type !== 'function_call') continue;
   const tool = tools.find((t) => t.name === item.name);
   if (!tool) continue;
-  const result = await tool.execute(JSON.parse(item.arguments)); // validates args + result; bad args → { error } by default
+  const result = await formatted(tool).execute(JSON.parse(item.arguments)); // bad args → { error }, so the model self-corrects
   input.push({ type: 'function_call_output', call_id: item.call_id, output: JSON.stringify(result) });
 }
 

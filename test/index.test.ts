@@ -1,21 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import { standardTool, type StandardTool } from '../dist/index.js';
+import { standardTool, formatted, StandardToolValidationError, type StandardTool } from '../dist/index.js';
 
 // Compile-time type assertions (checked by `npm run typecheck`). expectType<T> accepts
-// only `true`, so a wrong type fails to compile. ExecOut<T> = the awaited execute() return.
+// only `true`, so a wrong type fails to compile. ExecOut<T> = the awaited execute() return;
+// RawOut<T> = the awaited executeUnformatted() return.
 type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type ExecOut<T extends { execute: (input: never) => unknown }> = Awaited<ReturnType<T['execute']>>;
+type RawOut<T extends { executeUnformatted: (input: never) => unknown }> = Awaited<ReturnType<T['executeUnformatted']>>;
 const expectType = <_Pass extends true>(): void => {};
 
 // Real Zod schemas (Zod 4.2+ implements both Standard Schema and Standard JSON Schema).
 const inputSchema = z.object({ city: z.string() });
 const outputSchema = z.object({ tempC: z.number() });
 
-// One tool per formatOutput variant, reused by the runtime tests below.
-
-// (1) default formatOutput, with schemas → FormattedOutput = Output | { error }
+// A neutral tool: execute validates in & out and returns the raw Output, throwing on a violation.
 const weather = standardTool({
   name: 'get_weather',
   description: 'Current temperature for a city',
@@ -23,78 +23,47 @@ const weather = standardTool({
   outputSchema,
   execute: async () => ({ tempC: 21 }),
 });
-expectType<Equals<ExecOut<typeof weather>, { tempC: number } | { error: string }>>();
+// Neutral form: FormattedOutput defaults to Output, so execute returns the raw Output (no envelope).
+expectType<Equals<ExecOut<typeof weather>, { tempC: number }>>();
+expectType<Equals<RawOut<typeof weather>, { tempC: number }>>();
 weather satisfies StandardTool<{ city: string }, { tempC: number }>;
-weather satisfies StandardTool<{ city: string }, { tempC: number }, { tempC: number } | { error: string }>;
+weather satisfies StandardTool<{ city: string }, { tempC: number }, { tempC: number }>;
 
-// (2) default formatOutput, no schemas → Input/Output inferred from execute; FormattedOutput = Output | { error }
+// No schemas → Input/Output inferred from execute; still neutral.
 const echo = standardTool({
   name: 'echo',
   description: 'adds one',
   execute: (input: { x: number }) => ({ y: input.x + 1 }),
 });
-expectType<Equals<ExecOut<typeof echo>, { y: number } | { error: string }>>();
+expectType<Equals<ExecOut<typeof echo>, { y: number }>>();
 echo satisfies StandardTool<{ x: number }, { y: number }>;
 
-// (3) sync custom formatOutput returning string → FormattedOutput = string
-const stringFmt = standardTool({
-  name: 'string_fmt',
-  description: 'formats to a string',
-  inputSchema,
-  outputSchema,
-  formatOutput: (result) => (result instanceof Error ? `error: ${result.message}` : `ok: ${result.tempC}`),
-  execute: async () => ({ tempC: 9 }),
-});
-expectType<Equals<ExecOut<typeof stringFmt>, string>>();
-stringFmt satisfies StandardTool<{ city: string }, { tempC: number }, string>;
+// .formatted() with no formatter → the default { error } envelope.
+const weatherEnvelope = weather.formatted();
+expectType<Equals<ExecOut<typeof weatherEnvelope>, { tempC: number } | { error: string }>>();
+weatherEnvelope satisfies StandardTool<{ city: string }, { tempC: number }, { tempC: number } | { error: string }>;
 
-// (4) async custom formatOutput returning Promise<{ status }> → FormattedOutput = { status } (awaited, not a Promise)
-const asyncFmt = standardTool({
-  name: 'async_fmt',
-  description: 'async formatter',
-  inputSchema,
-  outputSchema,
-  formatOutput: async (result) => ({ status: result instanceof Error ? result.message : 'ok' }),
-  execute: async () => ({ tempC: 5 }),
-});
-expectType<Equals<ExecOut<typeof asyncFmt>, { status: string }>>();
-expectType<Equals<ReturnType<typeof asyncFmt.execute>, { status: string } | Promise<{ status: string }>>>();
+// .formatted(fmt) swaps only the 3rd generic; the raw Output is unchanged and still reachable.
+const toStr = (r: { tempC: number } | Error): string => (r instanceof Error ? `error: ${r.message}` : `ok: ${r.tempC}`);
+const weatherStr = weather.formatted(toStr);
+expectType<Equals<ExecOut<typeof weatherStr>, string>>();
+expectType<Equals<RawOut<typeof weatherStr>, { tempC: number }>>();
+weatherStr satisfies StandardTool<{ city: string }, { tempC: number }, string>;
 
-// (5) passthrough formatOutput returning the raw result → FormattedOutput = Output | Error
-const passthrough = standardTool({
-  name: 'passthrough',
-  description: 'returns the raw result/error',
-  inputSchema,
-  outputSchema,
-  formatOutput: (result) => result,
-  execute: async () => ({ tempC: 1 }),
-});
-expectType<Equals<ExecOut<typeof passthrough>, { tempC: number } | Error>>();
+// async formatter is awaited.
+const weatherAsync = weather.formatted(async (r) => ({ status: r instanceof Error ? r.message : 'ok' }));
+expectType<Equals<ExecOut<typeof weatherAsync>, { status: string }>>();
 
-// (6) throwing formatOutput (escape hatch) → FormattedOutput = Output
-const strict = standardTool({
-  name: 'strict',
-  description: 'throws on error',
-  inputSchema,
-  outputSchema,
-  formatOutput: (result) => {
-    if (result instanceof Error) throw result;
-    return result;
-  },
-  execute: async () => ({ tempC: 1 }),
-});
-expectType<Equals<ExecOut<typeof strict>, { tempC: number }>>();
-
-// (7) per-call meta forwarded to the handler; no outputSchema → FormattedOutput = Output | { error }
+// per-call meta forwarded to the handler; no outputSchema.
 const greet = standardTool({
   name: 'greet',
   description: 'greets with per-call punctuation',
   inputSchema: z.object({ name: z.string() }),
   execute: ({ name }, meta: { punct: string }) => `hi ${name}${meta.punct}`,
 });
-expectType<Equals<ExecOut<typeof greet>, string | { error: string }>>();
+expectType<Equals<ExecOut<typeof greet>, string>>();
 
-// (8) MCP text-only formatter: the README recipe, verified here.
+// The MCP text-only formatter recipe from the README, verified here.
 type McpToolResult = {
   content: { type: 'text'; text: string }[];
   structuredContent?: Record<string, unknown>;
@@ -113,28 +82,34 @@ const toMcpResult = (result: unknown): McpToolResult => {
   }
   return { content: [{ type: 'text', text }] };
 };
-const mcpWeather = standardTool({
-  name: 'get_weather',
-  description: 'Current temperature for a city',
-  inputSchema,
-  outputSchema,
-  formatOutput: toMcpResult,
-  execute: async () => ({ tempC: 21 }),
-});
+const mcpWeather = weather.formatted(toMcpResult);
 expectType<Equals<ExecOut<typeof mcpWeather>, McpToolResult>>();
+expectType<Equals<RawOut<typeof mcpWeather>, { tempC: number }>>();
+
+// Re-formatting replaces, it does not compose: the 3rd generic is the latest formatter's output.
+const reformatted = weather.formatted(toMcpResult).formatted(toStr);
+expectType<Equals<ExecOut<typeof reformatted>, string>>();
 
 // Runtime behavior. Error assertions check standardTool's prefix and the Standard
 // Schema issue path, not Zod's wording, so they hold across Zod versions.
 
-test('exposes exactly name, title, description, inputSchema, outputSchema, execute (no formatOutput member)', () => {
+test('FormattableTool exposes the neutral shape plus executeUnformatted + formatted', () => {
   assert.deepEqual(Object.keys(weather).sort(), [
     'description',
     'execute',
+    'executeUnformatted',
+    'formatted',
     'inputSchema',
     'name',
     'outputSchema',
     'title',
   ]);
+  // A FormattableTool still IS a StandardTool — the extra members are additive.
+  weather satisfies StandardTool<{ city: string }, { tempC: number }>;
+});
+
+test('a neutral tool has the same execute and executeUnformatted', () => {
+  assert.equal(weather.execute, weather.executeUnformatted);
 });
 
 test('passes the optional title through (undefined when omitted)', () => {
@@ -143,7 +118,7 @@ test('passes the optional title through (undefined when omitted)', () => {
   assert.equal(titled.title, 'Titled Tool');
 });
 
-test('default formatOutput returns the validated value on success', async () => {
+test('neutral execute returns the validated value on success', async () => {
   assert.deepEqual(await weather.execute({ city: 'Paris' }), { tempC: 21 });
 });
 
@@ -155,13 +130,20 @@ test('exposes JSON Schema via Standard JSON Schema', () => {
   assert.deepEqual(json.required, ['city']);
 });
 
-test('default formatOutput: invalid input → { error } envelope (no throw)', async () => {
-  const out = await weather.execute({ city: 123 } as unknown as { city: string });
-  assert.deepEqual(Object.keys(out), ['error']);
-  assert.match((out as { error: string }).error, /^input validation failed:/);
+test('neutral execute throws StandardToolValidationError on invalid input', async () => {
+  await assert.rejects(
+    () => Promise.resolve(weather.execute({ city: 123 } as unknown as { city: string })),
+    (err: unknown) => {
+      assert.ok(err instanceof StandardToolValidationError);
+      assert.equal(err.target, 'input');
+      assert.match(err.message, /^input validation failed:/);
+      assert.deepEqual(err.issues[0].path, ['city']);
+      return true;
+    }
+  );
 });
 
-test('default formatOutput: invalid output → { error } envelope (no throw)', async () => {
+test('neutral execute throws StandardToolValidationError on invalid output', async () => {
   const bad = standardTool({
     name: 'bad',
     description: 'wrong shape',
@@ -169,12 +151,17 @@ test('default formatOutput: invalid output → { error } envelope (no throw)', a
     outputSchema,
     execute: async () => ({ tempC: 'hot' }) as unknown as { tempC: number },
   });
-  const out = await bad.execute({ city: 'Paris' });
-  assert.deepEqual(Object.keys(out), ['error']);
-  assert.match((out as { error: string }).error, /^output validation failed:/);
+  await assert.rejects(
+    () => Promise.resolve(bad.execute({ city: 'Paris' })),
+    (err: unknown) => {
+      assert.ok(err instanceof StandardToolValidationError);
+      assert.equal(err.target, 'output');
+      return true;
+    }
+  );
 });
 
-test('default formatOutput: errors thrown in execute → { error } envelope', async () => {
+test('neutral execute rethrows what the handler threw (not wrapped)', async () => {
   const boom = standardTool({
     name: 'boom',
     description: 'throws',
@@ -184,7 +171,14 @@ test('default formatOutput: errors thrown in execute → { error } envelope', as
       throw new Error('kaboom');
     },
   });
-  assert.deepEqual(await boom.execute({ city: 'Paris' }), { error: 'kaboom' });
+  await assert.rejects(
+    () => Promise.resolve(boom.execute({ city: 'Paris' })),
+    (err: unknown) => {
+      assert.ok(err instanceof Error && !(err instanceof StandardToolValidationError));
+      assert.equal(err.message, 'kaboom');
+      return true;
+    }
+  );
 });
 
 test('optional schemas: validation skipped when omitted', async () => {
@@ -193,46 +187,15 @@ test('optional schemas: validation skipped when omitted', async () => {
   assert.deepEqual(await echo.execute({ x: 1 }), { y: 2 });
 });
 
-test('sync custom formatOutput reshapes the result', async () => {
-  assert.equal(await stringFmt.execute({ city: 'Paris' }), 'ok: 9');
-  assert.match(
-    await stringFmt.execute({ city: 123 } as unknown as { city: string }),
-    /^error: input validation failed:/
-  );
-});
-
-test('async custom formatOutput is awaited', async () => {
-  assert.deepEqual(await asyncFmt.execute({ city: 'Paris' }), { status: 'ok' });
-  const out = await asyncFmt.execute({ city: 123 } as unknown as { city: string });
-  assert.match(out.status, /^input validation failed:/);
-});
-
-test('passthrough formatOutput exposes the raw Error carrying issues', async () => {
-  assert.deepEqual(await passthrough.execute({ city: 'Paris' }), { tempC: 1 });
-  const err = await passthrough.execute({ city: 123 } as unknown as { city: string });
-  assert.ok(err instanceof Error);
-  assert.match(err.message, /^input validation failed:/);
-  const issues = (err as Error & { issues: { path?: PropertyKey[] }[] }).issues;
-  assert.ok(Array.isArray(issues) && issues.length > 0);
-  assert.deepEqual(issues[0].path, ['city']);
-});
-
-test('throwing formatOutput restores throwing (escape hatch)', async () => {
-  assert.deepEqual(await strict.execute({ city: 'Paris' }), { tempC: 1 });
-  await assert.rejects(
-    () => Promise.resolve(strict.execute({ city: 123 } as unknown as { city: string })),
-    /input validation failed:/
-  );
-});
-
 test('forwards the per-call meta argument verbatim to the handler', async () => {
   assert.equal(await greet.execute({ name: 'Ada' }, { punct: '!' }), 'hi Ada!');
-  assert.equal(await greet.execute({ name: 'Bob' }, { punct: '?' }), 'hi Bob?');
+  // meta still reaches the handler after formatting (it flows through executeUnformatted).
+  assert.equal(await greet.formatted().execute({ name: 'Bob' }, { punct: '?' }), 'hi Bob?');
+  assert.equal(await greet.executeUnformatted({ name: 'Cy' }, { punct: '.' }), 'hi Cy.');
 });
 
 test('default generics: bare StandardTool needs no type args and holds heterogeneous tools', () => {
-  // Input/Output default to unknown, so StandardTool[] needs no args (execute is bivariant).
-  const toolArray: StandardTool[] = [weather, echo, stringFmt, greet];
+  const toolArray: StandardTool[] = [weather, echo, greet, weatherStr];
   assert.equal(toolArray.length, 4);
 });
 
@@ -245,19 +208,84 @@ test('supports async validators', async () => {
     outputSchema: finiteNumber,
     execute: async (n) => n * 2,
   });
-  expectType<Equals<ExecOut<typeof double>, number | { error: string }>>();
+  expectType<Equals<ExecOut<typeof double>, number>>();
   assert.equal(await double.execute(21), 42);
 });
 
-test('MCP formatter: object output → JSON text block + structuredContent', async () => {
+test('.formatted() with no formatter: success → Output, failure → { error } (no throw)', async () => {
+  const t = weather.formatted();
+  assert.deepEqual(await t.execute({ city: 'Paris' }), { tempC: 21 });
+  const out = await t.execute({ city: 123 } as unknown as { city: string });
+  assert.deepEqual(Object.keys(out), ['error']);
+  assert.match((out as { error: string }).error, /^input validation failed:/);
+});
+
+test('.formatted(fmt) reshapes the result; failures are passed to the formatter, not thrown', async () => {
+  assert.equal(await weatherStr.execute({ city: 'Paris' }), 'ok: 21');
+  assert.match(
+    await weatherStr.execute({ city: 123 } as unknown as { city: string }),
+    /^error: input validation failed:/
+  );
+});
+
+test('async formatter is awaited', async () => {
+  assert.deepEqual(await weatherAsync.execute({ city: 'Paris' }), { status: 'ok' });
+  const out = await weatherAsync.execute({ city: 123 } as unknown as { city: string });
+  assert.match(out.status, /^input validation failed:/);
+});
+
+test('executeUnformatted stays raw and throwing even after formatting', async () => {
+  // mcpWeather.execute returns an MCP envelope, but the unformatted execute is still the raw, throwing one.
   assert.deepEqual(await mcpWeather.execute({ city: 'Paris' }), {
+    content: [{ type: 'text', text: '{"tempC":21}' }],
+    structuredContent: { tempC: 21 },
+  });
+  assert.deepEqual(await mcpWeather.executeUnformatted({ city: 'Paris' }), { tempC: 21 });
+  await assert.rejects(
+    () => mcpWeather.executeUnformatted({ city: 123 } as unknown as { city: string }),
+    StandardToolValidationError
+  );
+});
+
+test('re-formatting replaces and re-derives from the raw Output, never the previous formatting', async () => {
+  // Format to MCP, then to string. The string formatter sees { tempC }, NOT the MCP envelope.
+  const out = await weather.formatted(toMcpResult).formatted(toStr).execute({ city: 'Paris' });
+  assert.equal(out, 'ok: 21'); // 'ok: 21' (from raw), not 'ok: undefined' (which a composed envelope would give)
+});
+
+test('the headline case: a framework ships a pre-formatted tool, a consumer re-targets it', async () => {
+  // A framework hands out an MCP-shaped tool.
+  const shipped = weather.formatted(toMcpResult);
+  assert.equal((await shipped.execute({ city: 'Paris' })).content[0].text, '{"tempC":21}');
+  // The consumer re-formats it for a different consumer — derived from the raw Output, not the MCP shape.
+  const retargeted = shipped.formatted(toStr);
+  assert.equal(await retargeted.execute({ city: 'Paris' }), 'ok: 21');
+  // …or just takes the raw Output.
+  assert.deepEqual(await shipped.executeUnformatted({ city: 'Paris' }), { tempC: 21 });
+});
+
+test('free formatted(tool, fmt) formats a neutral tool; no fmt → default envelope', async () => {
+  assert.equal(await formatted(weather, toStr).execute({ city: 'Paris' }), 'ok: 21');
+  const enveloped = formatted(weather);
+  assert.deepEqual(await enveloped.execute({ city: 'Paris' }), { tempC: 21 });
+  const out = await enveloped.execute({ city: 123 } as unknown as { city: string });
+  assert.deepEqual(Object.keys(out), ['error']);
+});
+
+test('free formatted() returns a re-formattable tool that re-derives from the raw', async () => {
+  const out = await formatted(weather, toMcpResult).formatted(toStr).execute({ city: 'Paris' });
+  assert.equal(out, 'ok: 21');
+});
+
+test('MCP formatter: object output → JSON text block + structuredContent', async () => {
+  assert.deepEqual(await weather.formatted(toMcpResult).execute({ city: 'Paris' }), {
     content: [{ type: 'text', text: '{"tempC":21}' }],
     structuredContent: { tempC: 21 },
   });
 });
 
 test('MCP formatter: validation error → text block + isError (no structuredContent)', async () => {
-  const out = await mcpWeather.execute({ city: 123 } as unknown as { city: string });
+  const out = await weather.formatted(toMcpResult).execute({ city: 123 } as unknown as { city: string });
   assert.equal(out.isError, true);
   assert.equal(out.content[0].type, 'text');
   assert.match(out.content[0].text, /^input validation failed:/);

@@ -1,5 +1,7 @@
 # StandardTool &nbsp;[![npm](https://img.shields.io/npm/v/standard-tool)](https://www.npmjs.com/package/standard-tool) [![CI](https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/finom/standard-tool/actions/workflows/ci.yml)
 
+> 🚧 **Work in progress — not ready to present.** The core API (how tools validate and format their I/O) is being actively redesigned and will change. Don't build on the current shape yet.
+
 > **Status: proposal (RFC).** This is an early proposal for a shared, framework-agnostic way to define LLM tools. It's published to gather feedback and pressure-test the design, not as a finished standard, so the shape may still change. Issues, critiques, and counter-proposals are welcome.
 
 > A common type for defining LLM tools, built on [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema).

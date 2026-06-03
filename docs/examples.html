@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Examples · StandardTool</title>
+<meta name="description" content="Wiring a StandardTool into OpenAI, Anthropic, the Vercel AI SDK, and MCP.">
+<meta property="og:title" content="Examples · StandardTool">
+<meta property="og:description" content="Wiring a StandardTool into OpenAI, Anthropic, the Vercel AI SDK, and MCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%2309090b'/><text x='8' y='12' font-size='10' text-anchor='middle' fill='%23fafafa' font-family='monospace'>%7B%7D</text></svg>">
+<style>:root{--bg:#09090b;--bg-deep:#030712;--fg:#fafafa;--muted:#a1a1aa;--border:#6b7280;--line:#27272a;--mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+*{box-sizing:border-box}
+html{background:var(--bg-deep)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.wrap{max-width:768px;margin:0 auto;padding:28px 20px 80px}
+a{color:var(--fg)}
+header.nav{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px}
+.brand{font-size:15px;text-decoration:none;opacity:.9}
+.brand:hover{opacity:1}
+.nav-links{display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--border);border-radius:6px;padding:5px 11px;color:var(--fg);text-decoration:none;font-size:13px;line-height:1}
+.btn:hover{background:rgba(255,255,255,.06)}
+.card{display:flex;align-items:center;justify-content:space-between;gap:16px;border:2px solid var(--border);border-radius:4px;padding:16px 20px;color:var(--fg);text-decoration:none;margin:40px 0 0}
+.card:hover{background:rgba(255,255,255,.045)}
+.card h3{margin:0 0 4px;font-size:18px;font-weight:600}
+.card p{margin:0;font-size:13px;color:var(--muted)}
+.card .arrow{font-size:20px;opacity:.8}
+footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--muted);display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+footer a{color:var(--muted)}
+footer a:hover{color:var(--fg)}
+.md{margin-top:16px}
+.md>*:first-child{margin-top:0}
+.md h1,.md h2,.md h3,.md h4{font-weight:600;line-height:1.25}
+.md h1{font-size:30px;margin:0 0 10px}
+.md h2{font-size:21px;margin:40px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.md h3{font-size:17px;margin:28px 0 10px}
+.md h4{font-size:15px;margin:24px 0 8px}
+.md p,.md li{font-size:14px;line-height:1.7}
+.md ul,.md ol{padding-left:22px}
+.md li{margin:4px 0}
+.md a{color:var(--fg);text-decoration:underline;text-underline-offset:2px}
+.md strong{font-weight:600}
+.md img{max-width:100%;vertical-align:middle}
+.md hr{border:0;border-top:1px solid var(--line);margin:32px 0}
+.md code{font-family:var(--mono);font-size:13px}
+.md :not(pre)>code{background:rgba(255,255,255,.08);padding:1.5px 5px;border-radius:4px}
+.md h1 code,.md h2 code,.md h3 code,.md h4 code{font-size:1em}
+.md pre{background:var(--bg);border:2px solid var(--border);border-radius:4px;padding:12px 16px;overflow-x:auto;font-size:13px;line-height:1.55;margin:16px 0}
+.md pre code{background:none;padding:0;white-space:pre;color:#e6edf3}
+.md blockquote{margin:16px 0;padding:2px 16px;border-left:3px solid var(--border);color:var(--muted)}
+.md blockquote p{margin:8px 0}
+.md table{border-collapse:collapse;font-size:13px;display:block;width:max-content;max-width:100%;overflow-x:auto;margin:16px 0}
+.md th,.md td{border:1px solid var(--line);padding:6px 11px;text-align:left;vertical-align:top}
+.md th{font-weight:600}
+.md svg.octicon{display:none}
+.md .anchor{text-decoration:none}
+.md .pl-c{color:#8b949e}
+.md .pl-c1{color:#79c0ff}
+.md .pl-en{color:#d2a8ff}
+.md .pl-smi{color:#c9d1d9}
+.md .pl-ent{color:#7ee787}
+.md .pl-k{color:#ff7b72}
+.md .pl-s,.md .pl-pds{color:#a5d6ff}
+.md .pl-v{color:#ffa657}</style>
+</head>
+<body>
+<div class="wrap">
+<header class="nav">
+<a class="brand" href="./">StandardTool</a>
+<nav class="nav-links"><a class="btn" href="./">README</a><a class="btn" href="./overview.html">Overview</a><a class="btn" href="https://github.com/finom/standard-tool">GitHub</a><a class="btn" href="https://www.npmjs.com/package/standard-tool">npm</a></nav>
+</header>
+<main class="md">
+<h1 dir="auto" id="examples">Examples</h1>
+<p dir="auto">Using a StandardTool with <a href="#openai">OpenAI</a>, <a href="#anthropic">Anthropic</a>, the <a href="#vercel-ai-sdk">Vercel AI SDK</a>, and <a href="#mcp">MCP</a> — the SDKs that accept a JSON Schema object or a Standard Schema directly. (One that takes only a library-specific schema, such as a Zod raw shape, would need a per-library shim, so it's out of scope here.) Each example wires a single tool directly into the provider's request and handles the tool call inline — no helpers, no dispatch table — so you can see exactly which part of a StandardTool maps to what. In real code you'd factor these into your own abstractions; here they're spelled out.</p>
+<blockquote>
+<p dir="auto">The examples assume you've installed the provider SDK you're using (<code class="notranslate">openai</code>, <code class="notranslate">@anthropic-ai/sdk</code>, or <code class="notranslate">ai</code> with <code class="notranslate">@ai-sdk/*</code>) plus <code class="notranslate">standard-tool</code> and <code class="notranslate">zod</code>. They use Zod, but the model only ever sees the JSON Schema a tool emits, so Valibot or ArkType work the same way.</p>
+</blockquote>
+<p dir="auto">Two parts of a tool do the work in every integration:</p>
+<ul dir="auto">
+<li><code class="notranslate">inputSchema['~standard'].jsonSchema.input({ target })</code> — the JSON Schema you hand the model so it knows how to call the tool.</li>
+<li><code class="notranslate">execute(args)</code> — runs the tool, validating the model's arguments and the result and throwing on a violation. <code class="notranslate">formatted().execute(args)</code> returns <code class="notranslate">{ error }</code> instead of throwing, which is what you usually want inside a model loop.</li>
+</ul>
+<h2 dir="auto" id="the-shared-tool">The shared tool</h2>
+<p dir="auto">Define the tool once; every example below imports it.</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-c">// tool.ts</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">standardTool</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'standard-tool'</span><span class="pl-kos">;</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">z</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'zod'</span><span class="pl-kos">;</span>
+
+<span class="pl-k">export</span> <span class="pl-k">const</span> <span class="pl-s1">getWeather</span> <span class="pl-c1">=</span> <span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+  <span class="pl-c1">name</span>: <span class="pl-s">'get_weather'</span><span class="pl-kos">,</span>
+  <span class="pl-c1">description</span>: <span class="pl-s">'Get the current temperature for a city.'</span><span class="pl-kos">,</span>
+  <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-c1">outputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">number</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-en">execute</span>: <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> city <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-c1">21</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span> <span class="pl-c">// call your real weather API here</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<h2 dir="auto" id="openai">OpenAI</h2>
+<h3 dir="auto" id="chat-completions">Chat Completions</h3>
+<p dir="auto">Tools go in under a <code class="notranslate">function</code> key; calls come back on <code class="notranslate">message.tool_calls</code>; each result is a <code class="notranslate">role: 'tool'</code> message.</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-v">OpenAI</span> <span class="pl-k">from</span> <span class="pl-s">'openai'</span><span class="pl-kos">;</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">getWeather</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'./tool'</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">client</span> <span class="pl-c1">=</span> <span class="pl-k">new</span> <span class="pl-v">OpenAI</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">messages</span>: <span class="pl-v">OpenAI</span><span class="pl-kos">.</span><span class="pl-c1">Chat</span><span class="pl-kos">.</span><span class="pl-smi">ChatCompletionMessageParam</span><span class="pl-kos">[</span><span class="pl-kos">]</span> <span class="pl-c1">=</span> <span class="pl-kos">[</span>
+  <span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'user'</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-s">'What is the weather in Paris?'</span> <span class="pl-kos">}</span><span class="pl-kos">,</span>
+<span class="pl-kos">]</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">res</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">chat</span><span class="pl-kos">.</span><span class="pl-c1">completions</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+  <span class="pl-c1">model</span>: <span class="pl-s">'gpt-5.5'</span><span class="pl-kos">,</span>
+  messages<span class="pl-kos">,</span>
+  <span class="pl-c1">tools</span>: <span class="pl-kos">[</span>
+    <span class="pl-kos">{</span>
+      <span class="pl-c1">type</span>: <span class="pl-s">'function'</span><span class="pl-kos">,</span>
+      <span class="pl-c1">function</span>: <span class="pl-kos">{</span>
+        <span class="pl-c1">name</span>: <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">,</span>
+        <span class="pl-c1">description</span>: <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">description</span><span class="pl-kos">,</span>
+        <span class="pl-c1">parameters</span>: <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-c1">!</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+      <span class="pl-kos">}</span><span class="pl-kos">,</span>
+    <span class="pl-kos">}</span><span class="pl-kos">,</span>
+  <span class="pl-kos">]</span><span class="pl-kos">,</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-s1">messages</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">choices</span><span class="pl-kos">[</span><span class="pl-c1">0</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">message</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-k">for</span> <span class="pl-kos">(</span><span class="pl-k">const</span> <span class="pl-s1">call</span> <span class="pl-k">of</span> <span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">choices</span><span class="pl-kos">[</span><span class="pl-c1">0</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">message</span><span class="pl-kos">.</span><span class="pl-c1">tool_calls</span> <span class="pl-c1">??</span> <span class="pl-kos">[</span><span class="pl-kos">]</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">call</span><span class="pl-kos">.</span><span class="pl-c1">type</span> <span class="pl-c1">!==</span> <span class="pl-s">'function'</span> <span class="pl-c1">||</span> <span class="pl-s1">call</span><span class="pl-kos">.</span><span class="pl-c1">function</span><span class="pl-kos">.</span><span class="pl-c1">name</span> <span class="pl-c1">!==</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">)</span> <span class="pl-k">continue</span><span class="pl-kos">;</span>
+  <span class="pl-c">// execute is the only validation — OpenAI doesn't check args; bad args come back as { error }</span>
+  <span class="pl-k">const</span> <span class="pl-s1">result</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">parse</span><span class="pl-kos">(</span><span class="pl-s1">call</span><span class="pl-kos">.</span><span class="pl-c1">function</span><span class="pl-kos">.</span><span class="pl-c1">arguments</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-s1">messages</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'tool'</span><span class="pl-kos">,</span> <span class="pl-c1">tool_call_id</span>: <span class="pl-s1">call</span><span class="pl-kos">.</span><span class="pl-c1">id</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">stringify</span><span class="pl-kos">(</span><span class="pl-s1">result</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">final</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">chat</span><span class="pl-kos">.</span><span class="pl-c1">completions</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">model</span>: <span class="pl-s">'gpt-5.5'</span><span class="pl-kos">,</span> messages <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s1">final</span><span class="pl-kos">.</span><span class="pl-c1">choices</span><span class="pl-kos">[</span><span class="pl-c1">0</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">message</span><span class="pl-kos">.</span><span class="pl-c1">content</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<h3 dir="auto" id="responses-api">Responses API</h3>
+<p dir="auto">The Responses API is flatter — it drops the <code class="notranslate">function</code> wrapper and adds an optional <code class="notranslate">strict</code>. Tool calls arrive as <code class="notranslate">function_call</code> items in <code class="notranslate">res.output</code>, and results go back as <code class="notranslate">function_call_output</code>:</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-v">OpenAI</span> <span class="pl-k">from</span> <span class="pl-s">'openai'</span><span class="pl-kos">;</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">getWeather</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'./tool'</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">client</span> <span class="pl-c1">=</span> <span class="pl-k">new</span> <span class="pl-v">OpenAI</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">input</span>: <span class="pl-v">OpenAI</span><span class="pl-kos">.</span><span class="pl-c1">Responses</span><span class="pl-kos">.</span><span class="pl-smi">ResponseInput</span> <span class="pl-c1">=</span> <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'user'</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-s">'What is the weather in Paris?'</span> <span class="pl-kos">}</span><span class="pl-kos">]</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">res</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">responses</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+  <span class="pl-c1">model</span>: <span class="pl-s">'gpt-5.5'</span><span class="pl-kos">,</span>
+  input<span class="pl-kos">,</span>
+  <span class="pl-c1">tools</span>: <span class="pl-kos">[</span>
+    <span class="pl-kos">{</span>
+      <span class="pl-c1">type</span>: <span class="pl-s">'function'</span><span class="pl-kos">,</span>
+      <span class="pl-c1">name</span>: <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">,</span>
+      <span class="pl-c1">description</span>: <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">description</span><span class="pl-kos">,</span>
+      <span class="pl-c1">parameters</span>: <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-c1">!</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+      <span class="pl-c1">strict</span>: <span class="pl-c1">false</span><span class="pl-kos">,</span>
+    <span class="pl-kos">}</span><span class="pl-kos">,</span>
+  <span class="pl-kos">]</span><span class="pl-kos">,</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-s1">input</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span>...<span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">output</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-k">for</span> <span class="pl-kos">(</span><span class="pl-k">const</span> <span class="pl-s1">item</span> <span class="pl-k">of</span> <span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">output</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">item</span><span class="pl-kos">.</span><span class="pl-c1">type</span> <span class="pl-c1">!==</span> <span class="pl-s">'function_call'</span> <span class="pl-c1">||</span> <span class="pl-s1">item</span><span class="pl-kos">.</span><span class="pl-c1">name</span> <span class="pl-c1">!==</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">)</span> <span class="pl-k">continue</span><span class="pl-kos">;</span>
+  <span class="pl-k">const</span> <span class="pl-s1">result</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">parse</span><span class="pl-kos">(</span><span class="pl-s1">item</span><span class="pl-kos">.</span><span class="pl-c1">arguments</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-s1">input</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'function_call_output'</span><span class="pl-kos">,</span> <span class="pl-c1">call_id</span>: <span class="pl-s1">item</span><span class="pl-kos">.</span><span class="pl-c1">call_id</span><span class="pl-kos">,</span> <span class="pl-c1">output</span>: <span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">stringify</span><span class="pl-kos">(</span><span class="pl-s1">result</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">final</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">responses</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">model</span>: <span class="pl-s">'gpt-5.5'</span><span class="pl-kos">,</span> input <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s1">final</span><span class="pl-kos">.</span><span class="pl-c1">output_text</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<h2 dir="auto" id="anthropic">Anthropic</h2>
+<p dir="auto">The Messages API uses <code class="notranslate">input_schema</code> instead of <code class="notranslate">parameters</code>, returns <code class="notranslate">tool_use</code> blocks in the assistant's <code class="notranslate">content</code>, and expects <code class="notranslate">tool_result</code> blocks in a following <code class="notranslate">user</code> message.</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-v">Anthropic</span> <span class="pl-k">from</span> <span class="pl-s">'@anthropic-ai/sdk'</span><span class="pl-kos">;</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">getWeather</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'./tool'</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">client</span> <span class="pl-c1">=</span> <span class="pl-k">new</span> <span class="pl-v">Anthropic</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">messages</span>: <span class="pl-v">Anthropic</span><span class="pl-kos">.</span><span class="pl-smi">MessageParam</span><span class="pl-kos">[</span><span class="pl-kos">]</span> <span class="pl-c1">=</span> <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'user'</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-s">'What is the weather in Paris?'</span> <span class="pl-kos">}</span><span class="pl-kos">]</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">res</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">messages</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+  <span class="pl-c1">model</span>: <span class="pl-s">'claude-sonnet-4-6'</span><span class="pl-kos">,</span>
+  <span class="pl-c1">max_tokens</span>: <span class="pl-c1">1024</span><span class="pl-kos">,</span>
+  messages<span class="pl-kos">,</span>
+  <span class="pl-c1">tools</span>: <span class="pl-kos">[</span>
+    <span class="pl-kos">{</span>
+      <span class="pl-c1">name</span>: <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">,</span>
+      <span class="pl-c1">description</span>: <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">description</span><span class="pl-kos">,</span>
+      <span class="pl-c1">input_schema</span>: <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-c1">!</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+        <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span><span class="pl-kos">,</span>
+      <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-k">as</span> <span class="pl-v">Anthropic</span><span class="pl-kos">.</span><span class="pl-smi">Tool</span><span class="pl-kos">.</span><span class="pl-c1">InputSchema</span><span class="pl-kos">,</span>
+    <span class="pl-kos">}</span><span class="pl-kos">,</span>
+  <span class="pl-kos">]</span><span class="pl-kos">,</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-s1">messages</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'assistant'</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">content</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-k">const</span> <span class="pl-s1">results</span>: <span class="pl-v">Anthropic</span><span class="pl-kos">.</span><span class="pl-smi">ToolResultBlockParam</span><span class="pl-kos">[</span><span class="pl-kos">]</span> <span class="pl-c1">=</span> <span class="pl-kos">[</span><span class="pl-kos">]</span><span class="pl-kos">;</span>
+<span class="pl-k">for</span> <span class="pl-kos">(</span><span class="pl-k">const</span> <span class="pl-s1">block</span> <span class="pl-k">of</span> <span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">content</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">block</span><span class="pl-kos">.</span><span class="pl-c1">type</span> <span class="pl-c1">!==</span> <span class="pl-s">'tool_use'</span> <span class="pl-c1">||</span> <span class="pl-s1">block</span><span class="pl-kos">.</span><span class="pl-c1">name</span> <span class="pl-c1">!==</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">)</span> <span class="pl-k">continue</span><span class="pl-kos">;</span>
+  <span class="pl-c">// block.input arrives as unknown off the wire; execute validates it (returns { error } on a mismatch)</span>
+  <span class="pl-k">const</span> <span class="pl-s1">result</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-s1">block</span><span class="pl-kos">.</span><span class="pl-c1">input</span> <span class="pl-k">as</span> <span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-smi">string</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-s1">results</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'tool_result'</span><span class="pl-kos">,</span> <span class="pl-c1">tool_use_id</span>: <span class="pl-s1">block</span><span class="pl-kos">.</span><span class="pl-c1">id</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">stringify</span><span class="pl-kos">(</span><span class="pl-s1">result</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span>
+<span class="pl-s1">messages</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'user'</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-s1">results</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">final</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">messages</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">model</span>: <span class="pl-s">'claude-sonnet-4-6'</span><span class="pl-kos">,</span> <span class="pl-c1">max_tokens</span>: <span class="pl-c1">1024</span><span class="pl-kos">,</span> messages <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s1">final</span><span class="pl-kos">.</span><span class="pl-c1">content</span><span class="pl-kos">.</span><span class="pl-en">flatMap</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">b</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-s1">b</span><span class="pl-kos">.</span><span class="pl-c1">type</span> <span class="pl-c1">===</span> <span class="pl-s">'text'</span> ? <span class="pl-kos">[</span><span class="pl-s1">b</span><span class="pl-kos">.</span><span class="pl-c1">text</span><span class="pl-kos">]</span> : <span class="pl-kos">[</span><span class="pl-kos">]</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">join</span><span class="pl-kos">(</span><span class="pl-s">''</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<h2 dir="auto" id="vercel-ai-sdk">Vercel AI SDK</h2>
+<p dir="auto">The AI SDK (version 6) runs the tool loop itself: give <code class="notranslate">generateText</code> a set of tools and a <code class="notranslate">stopWhen</code> condition and it calls them and feeds results back until the model answers.</p>
+<p dir="auto">The thing to get right is validation. The SDK validates a tool's input against <code class="notranslate">inputSchema</code> before calling <code class="notranslate">execute</code> — but only when that schema carries a validator. Since <code class="notranslate">execute</code> already validates, hand the SDK the emitted JSON Schema through <code class="notranslate">jsonSchema()</code> (which has no validator), so the SDK only uses it to describe the tool to the model and <code class="notranslate">execute</code> validates exactly once.</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">generateText</span><span class="pl-kos">,</span> <span class="pl-s1">tool</span><span class="pl-kos">,</span> <span class="pl-s1">jsonSchema</span><span class="pl-kos">,</span> <span class="pl-s1">stepCountIs</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'ai'</span><span class="pl-kos">;</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">openai</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'@ai-sdk/openai'</span><span class="pl-kos">;</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">getWeather</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'./tool'</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-kos">{</span> text <span class="pl-kos">}</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-en">generateText</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+  <span class="pl-c1">model</span>: <span class="pl-en">openai</span><span class="pl-kos">(</span><span class="pl-s">'gpt-5.5'</span><span class="pl-kos">)</span><span class="pl-kos">,</span> <span class="pl-c">// or anthropic('claude-sonnet-4-6')</span>
+  <span class="pl-c1">prompt</span>: <span class="pl-s">'What is the weather in Paris?'</span><span class="pl-kos">,</span>
+  <span class="pl-c1">stopWhen</span>: <span class="pl-en">stepCountIs</span><span class="pl-kos">(</span><span class="pl-c1">5</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-c1">tools</span>: <span class="pl-kos">{</span>
+    <span class="pl-kos">[</span><span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">]</span>: <span class="pl-en">tool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+      <span class="pl-c1">description</span>: <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">description</span><span class="pl-kos">,</span>
+      <span class="pl-c">// no `validate` on jsonSchema() → the SDK describes the tool but does not validate, so the one</span>
+      <span class="pl-c">// validation happens in getWeather.execute below (no double validation)</span>
+      <span class="pl-c1">inputSchema</span>: <span class="pl-en">jsonSchema</span><span class="pl-c1">&lt;</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-smi">string</span> <span class="pl-kos">}</span><span class="pl-c1">&gt;</span><span class="pl-kos">(</span>
+        <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-c1">!</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+      <span class="pl-kos">)</span><span class="pl-kos">,</span>
+      <span class="pl-en">execute</span>: <span class="pl-kos">(</span><span class="pl-s1">args</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-s1">args</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+    <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-kos">}</span><span class="pl-kos">,</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s1">text</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<h2 dir="auto" id="mcp">MCP</h2>
+<p dir="auto">A StandardTool maps onto the Model Context Protocol with the same two parts:</p>
+<ul dir="auto">
+<li><strong><code class="notranslate">tools/list</code></strong> — <code class="notranslate">inputSchema['~standard'].jsonSchema.input({ target })</code> and <code class="notranslate">.output({ target })</code> give the <code class="notranslate">inputSchema</code> / <code class="notranslate">outputSchema</code> JSON Schema for the descriptor (<code class="notranslate">name</code>, <code class="notranslate">title</code>, <code class="notranslate">description</code>).</li>
+<li><strong><code class="notranslate">tools/call</code></strong> — apply the text-only <code class="notranslate">.formatted(toMcpResult)</code> formatter from the README's <a href="./#mcp-compatible-output">MCP-compatible output</a> section, and <code class="notranslate">execute</code> returns a value shaped like an MCP <code class="notranslate">CallToolResult</code> (<code class="notranslate">{ content, structuredContent?, isError? }</code>) that you return from the handler. <code class="notranslate">execute</code> validates once; don't also register a validating schema for the same call.</li>
+</ul>
+<h2 dir="auto" id="notes">Notes</h2>
+<ul dir="auto">
+<li><strong>Validate once.</strong> OpenAI and Anthropic don't check tool arguments against your schema, so <code class="notranslate">execute</code> is the validation — that's why the examples call it on the model's raw args. A framework that <em>does</em> validate from the schema would validate twice if <code class="notranslate">execute</code> also ran; pass the JSON Schema through <code class="notranslate">jsonSchema()</code> with no validator (as in the Vercel example) so the framework only describes the tool and <code class="notranslate">execute</code> validates once.</li>
+<li><strong>Errors as data.</strong> <code class="notranslate">execute</code> throws on a bad argument or result; <code class="notranslate">formatted().execute</code> returns <code class="notranslate">{ error }</code> instead. In a model loop you usually want the latter, so one malformed call goes back to the model to fix rather than throwing.</li>
+<li><strong>JSON Schema targets.</strong> <code class="notranslate">{ target: 'draft-2020-12' }</code> fits OpenAI and Anthropic; use <code class="notranslate">'openapi-3.0'</code> for consumers that want the OpenAPI subset (such as Gemini), or <code class="notranslate">'draft-07'</code>.</li>
+<li><strong>Per-call context.</strong> Pass data the model shouldn't see (an auth token, tenant, locale) as the second argument to <code class="notranslate">execute(input, meta)</code>. It's never validated and never in the JSON Schema.</li>
+</ul>
+<h2 dir="auto" id="links">Links</h2>
+<ul dir="auto">
+<li><a href="./">README</a> — the type, the API, and the OpenAI Responses + MCP-output sections</li>
+<li><a href="./overview.html">OVERVIEW</a> — why this exists and how the provider/framework tool shapes compare</li>
+<li><a href="https://standardschema.dev" rel="nofollow">Standard Schema</a> · <a href="https://standardschema.dev/json-schema" rel="nofollow">Standard JSON Schema</a></li>
+<li><a href="https://developers.openai.com/api/docs/guides/function-calling" rel="nofollow">OpenAI function calling</a> · <a href="https://platform.claude.com/docs/en/build-with-claude/tool-use" rel="nofollow">Anthropic tool use</a> · <a href="https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling" rel="nofollow">AI SDK tools</a></li>
+</ul>
+</main>
+<a class="card" href="./overview.html"><div><h3>Overview</h3><p>Why StandardTool exists, and the landscape it fits into.</p></div><span class="arrow">&rarr;</span></a><a class="card" href="./"><div><h3>Get started</h3><p>Install, the type, and the reference implementation.</p></div><span class="arrow">&rarr;</span></a>
+<footer>
+<a href="https://github.com/finom/standard-tool">GitHub</a>
+<a href="https://www.npmjs.com/package/standard-tool">npm</a>
+<a href="./overview.html">Overview</a>
+<a href="./examples.html">Examples</a>
+<span>hosted on js.org</span>
+</footer>
+</div>
+</body>
+</html>

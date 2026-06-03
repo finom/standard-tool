@@ -1,6 +1,6 @@
 # Examples
 
-Using a StandardTool with [OpenAI](#openai), [Anthropic](#anthropic), the [Vercel AI SDK](#vercel-ai-sdk), and [MCP](#mcp) — the SDKs that accept a JSON Schema object or a Standard Schema directly. (One that takes only a library-specific schema, such as a Zod raw shape, would need a per-library shim, so it's out of scope here.) Each example wires a single tool directly into the provider's request and handles the tool call inline — no helpers, no dispatch table — so you can see exactly which part of a StandardTool maps to what. In real code you'd factor these into your own abstractions; here they're spelled out.
+Using a StandardTool with [OpenAI](#openai), [Anthropic](#anthropic), the [Vercel AI SDK](#vercel-ai-sdk), and [MCP](#mcp) — the SDKs that accept a JSON Schema object or a Standard Schema directly. (One that takes only a library-specific schema, such as a Zod raw shape, would need a per-library shim, so it's out of scope here.) Each example keeps the tools in one array, maps it into the provider's request, and dispatches each tool call back by `name` — all inline, no helper functions. In real code you'd factor these into your own abstractions; here they're spelled out.
 
 > The examples assume you've installed the provider SDK you're using (`openai`, `@anthropic-ai/sdk`, or `ai` with `@ai-sdk/*`) plus `standard-tool` and `zod`. They use Zod, but the model only ever sees the JSON Schema a tool emits, so Valibot or ArkType work the same way.
 
@@ -9,22 +9,38 @@ Two parts of a tool do the work in every integration:
 - `inputSchema['~standard'].jsonSchema.input({ target })` — the JSON Schema you hand the model so it knows how to call the tool.
 - `execute(args)` — runs the tool, validating the model's arguments and the result and throwing on a violation. `formatted().execute(args)` returns `{ error }` instead of throwing, which is what you usually want inside a model loop.
 
-## The shared tool
+## The shared tools
 
-Define the tool once; every example below imports it.
+Define the tools once; every example below imports this array.
 
 ```ts
-// tool.ts
-import { standardTool } from 'standard-tool';
+// tools.ts
+import { standardTool, type FormattableStandardTool } from 'standard-tool';
 import { z } from 'zod';
 
-export const getWeather = standardTool({
-  name: 'get_weather',
-  description: 'Get the current temperature for a city.',
-  inputSchema: z.object({ city: z.string() }),
-  outputSchema: z.object({ tempC: z.number() }),
-  execute: async ({ city }) => ({ tempC: 21 }), // call your real weather API here
-});
+export const tools: FormattableStandardTool[] = [
+  standardTool({
+    name: 'get_weather',
+    description: 'Get the current temperature for a city.',
+    inputSchema: z.object({ city: z.string() }),
+    outputSchema: z.object({ tempC: z.number() }),
+    execute: async ({ city }) => ({ tempC: 21 }), // call your real weather API here
+  }),
+  standardTool({
+    name: 'get_time',
+    description: 'Get the current time in an IANA timezone.',
+    inputSchema: z.object({ timezone: z.string() }),
+    outputSchema: z.object({ iso: z.string() }),
+    execute: async ({ timezone }) => ({ iso: new Date().toLocaleString('en-US', { timeZone: timezone }) }),
+  }),
+  standardTool({
+    name: 'convert_currency',
+    description: 'Convert an amount between two currencies.',
+    inputSchema: z.object({ amount: z.number(), from: z.string(), to: z.string() }),
+    outputSchema: z.object({ amount: z.number() }),
+    execute: async ({ amount }) => ({ amount: Math.round(amount * 1.08 * 100) / 100 }), // call your real FX API here
+  }),
+];
 ```
 
 ## OpenAI
@@ -35,7 +51,7 @@ Tools go in under a `function` key; calls come back on `message.tool_calls`; eac
 
 ```ts
 import OpenAI from 'openai';
-import { getWeather } from './tool';
+import { tools } from './tools';
 
 const client = new OpenAI();
 
@@ -46,23 +62,23 @@ const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
 const res = await client.chat.completions.create({
   model: 'gpt-5.5',
   messages,
-  tools: [
-    {
-      type: 'function',
-      function: {
-        name: getWeather.name,
-        description: getWeather.description,
-        parameters: getWeather.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' }),
-      },
+  tools: tools.map((tool): OpenAI.Chat.ChatCompletionTool => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) ?? {},
     },
-  ],
+  })),
 });
 
 messages.push(res.choices[0].message);
 for (const call of res.choices[0].message.tool_calls ?? []) {
-  if (call.type !== 'function' || call.function.name !== getWeather.name) continue;
+  if (call.type !== 'function') continue;
+  const tool = tools.find((t) => t.name === call.function.name);
+  if (!tool) continue;
   // execute is the only validation — OpenAI doesn't check args; schema-invalid args come back as { error }
-  const result = await getWeather.formatted().execute(JSON.parse(call.function.arguments));
+  const result = await tool.formatted().execute(JSON.parse(call.function.arguments));
   messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
 }
 
@@ -76,7 +92,7 @@ The Responses API is flatter — it drops the `function` wrapper and adds an opt
 
 ```ts
 import OpenAI from 'openai';
-import { getWeather } from './tool';
+import { tools } from './tools';
 
 const client = new OpenAI();
 
@@ -85,21 +101,21 @@ const input: OpenAI.Responses.ResponseInput = [{ role: 'user', content: 'What is
 const res = await client.responses.create({
   model: 'gpt-5.5',
   input,
-  tools: [
-    {
-      type: 'function',
-      name: getWeather.name,
-      description: getWeather.description,
-      parameters: getWeather.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' }),
-      strict: false,
-    },
-  ],
+  tools: tools.map((tool): OpenAI.Responses.Tool => ({
+    type: 'function',
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) ?? {},
+    strict: false,
+  })),
 });
 
 input.push(...res.output);
 for (const item of res.output) {
-  if (item.type !== 'function_call' || item.name !== getWeather.name) continue;
-  const result = await getWeather.formatted().execute(JSON.parse(item.arguments));
+  if (item.type !== 'function_call') continue;
+  const tool = tools.find((t) => t.name === item.name);
+  if (!tool) continue;
+  const result = await tool.formatted().execute(JSON.parse(item.arguments));
   input.push({ type: 'function_call_output', call_id: item.call_id, output: JSON.stringify(result) });
 }
 
@@ -113,7 +129,7 @@ The Messages API uses `input_schema` instead of `parameters`, returns `tool_use`
 
 ```ts
 import Anthropic from '@anthropic-ai/sdk';
-import { getWeather } from './tool';
+import { tools } from './tools';
 
 const client = new Anthropic();
 
@@ -123,23 +139,23 @@ const res = await client.messages.create({
   model: 'claude-sonnet-4-6',
   max_tokens: 1024,
   messages,
-  tools: [
-    {
-      name: getWeather.name,
-      description: getWeather.description,
-      input_schema: getWeather.inputSchema!['~standard'].jsonSchema.input({
-        target: 'draft-2020-12',
-      }) as Anthropic.Tool.InputSchema,
-    },
-  ],
+  tools: tools.map((tool): Anthropic.Tool => ({
+    name: tool.name,
+    description: tool.description,
+    input_schema: (tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) ?? {
+      type: 'object',
+      properties: {},
+    }) as Anthropic.Tool.InputSchema,
+  })),
 });
 
 messages.push({ role: 'assistant', content: res.content });
 const results: Anthropic.ToolResultBlockParam[] = [];
 for (const block of res.content) {
-  if (block.type !== 'tool_use' || block.name !== getWeather.name) continue;
-  // block.input arrives as unknown off the wire; execute validates it (returns { error } on a mismatch)
-  const result = await getWeather.formatted().execute(block.input as { city: string });
+  if (block.type !== 'tool_use') continue;
+  const tool = tools.find((t) => t.name === block.name);
+  if (!tool) continue;
+  const result = await tool.formatted().execute(block.input); // block.input is unknown; execute validates it
   results.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
 }
 messages.push({ role: 'user', content: results });
@@ -157,23 +173,24 @@ The thing to get right is validation. The SDK validates a tool's input against `
 ```ts
 import { generateText, tool, jsonSchema, stepCountIs } from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { getWeather } from './tool';
+import { tools } from './tools';
 
 const { text } = await generateText({
   model: openai('gpt-5.5'), // or anthropic('claude-sonnet-4-6')
   prompt: 'What is the weather in Paris?',
   stopWhen: stepCountIs(5),
-  tools: {
-    [getWeather.name]: tool({
-      description: getWeather.description,
-      // no `validate` on jsonSchema() → the SDK describes the tool but does not validate, so the one
-      // validation happens in getWeather.execute below (no double validation)
-      inputSchema: jsonSchema<{ city: string }>(
-        getWeather.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' }),
-      ),
-      execute: (args) => getWeather.execute(args),
-    }),
-  },
+  tools: Object.fromEntries(
+    tools.map((t) => [
+      t.name,
+      tool({
+        description: t.description,
+        // jsonSchema() has no validator, so the SDK only describes the tool; executeUnformatted runs the
+        // tool's raw validated execution — the one validation, and it stays raw even if the tool is formatted
+        inputSchema: jsonSchema(t.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) ?? {}),
+        execute: (args) => t.executeUnformatted(args),
+      }),
+    ]),
+  ),
 });
 
 console.log(text);

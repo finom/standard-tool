@@ -159,10 +159,12 @@ const examplesCard = `<a class="card" href="./examples.html"><div><h3>Examples</
 const homeCard = `<a class="card" href="./"><div><h3>Get started</h3><p>Install, the type, and the reference implementation.</p></div><span class="arrow">&rarr;</span></a>`;
 
 const readmeMd = readFileSync(join(root, 'README.md'), 'utf8');
+// The npm/CI badges sit on the README's H1 (after &nbsp;) for GitHub; strip them from the site's title.
+const readmeForSite = readmeMd.replace(/^(# StandardTool)\s*&nbsp;.*$/m, '$1');
 const overviewMd = readFileSync(join(root, 'OVERVIEW.md'), 'utf8');
 const examplesMd = readFileSync(join(root, 'EXAMPLES.md'), 'utf8');
 const [readmeHtml, overviewHtml, examplesHtml] = await Promise.all([
-  render(readmeMd),
+  render(readmeForSite),
   render(overviewMd),
   render(examplesMd),
 ]);

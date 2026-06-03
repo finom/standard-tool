@@ -230,10 +230,10 @@ footer a:hover{color:var(--fg)}
       <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">,</span>
       <span class="pl-en">tool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
         <span class="pl-c1">description</span>: <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">description</span><span class="pl-kos">,</span>
-        <span class="pl-c">// no `validate` on jsonSchema() → the SDK describes the tool but does not validate, so t.execute</span>
-        <span class="pl-c">// is the single validator (no double validation)</span>
+        <span class="pl-c">// jsonSchema() has no validator, so the SDK only describes the tool; executeUnformatted runs the</span>
+        <span class="pl-c">// tool's raw validated execution — the one validation, and it stays raw even if the tool is formatted</span>
         <span class="pl-c1">inputSchema</span>: <span class="pl-en">jsonSchema</span><span class="pl-kos">(</span><span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-kos">?.</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">??</span> <span class="pl-kos">{</span><span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-        <span class="pl-en">execute</span>: <span class="pl-kos">(</span><span class="pl-s1">args</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-s1">args</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+        <span class="pl-en">execute</span>: <span class="pl-kos">(</span><span class="pl-s1">args</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-en">executeUnformatted</span><span class="pl-kos">(</span><span class="pl-s1">args</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
       <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
     <span class="pl-kos">]</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
   <span class="pl-kos">)</span><span class="pl-kos">,</span>

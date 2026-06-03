@@ -278,8 +278,9 @@ const result = await mcp.execute(args); // → { content, structuredContent, isE
 import { tool, jsonSchema } from 'ai';
 const aiTool = tool({
   description: getWeather.description,
+  // jsonSchema() only describes the tool (no validator); executeUnformatted is the raw validated run
   inputSchema: jsonSchema<{ city: string }>(getWeather.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' })),
-  execute: (input) => getWeather.execute(input),
+  execute: (input) => getWeather.executeUnformatted(input),
 });
 ```
 

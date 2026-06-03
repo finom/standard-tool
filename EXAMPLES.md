@@ -184,10 +184,10 @@ const { text } = await generateText({
       t.name,
       tool({
         description: t.description,
-        // no `validate` on jsonSchema() → the SDK describes the tool but does not validate, so t.execute
-        // is the single validator (no double validation)
+        // jsonSchema() has no validator, so the SDK only describes the tool; executeUnformatted runs the
+        // tool's raw validated execution — the one validation, and it stays raw even if the tool is formatted
         inputSchema: jsonSchema(t.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) ?? {}),
-        execute: (args) => t.execute(args),
+        execute: (args) => t.executeUnformatted(args),
       }),
     ]),
   ),

@@ -202,21 +202,21 @@ StandardTool applies the Standard Schema move one level up: standardize the enve
 One shape:
 
 ```ts
-interface StandardTool<Input, Output, FormattedOutput, /* meta is any */> {
+interface StandardTool<Input, Output, FormattedOutput = Output, /* meta is any */> {
   name: string;
   title?: string;                                  // human label; used by MCP-style clients
   description: string;
   inputSchema?:  CombinedSpec<Input>;              // Standard Schema + Standard JSON Schema
   outputSchema?: CombinedSpec<Output>;
-  execute(input: Input, meta?: any): FormattedOutput | Promise<FormattedOutput>;
+  execute(input: Input, meta?: any): FormattedOutput | Promise<FormattedOutput>; // neutral: validated Output, throws
 }
 ```
 
 Here, `CombinedSpec` means "a schema that both validates and emits JSON Schema": Zod 4.2+, ArkType 2.1.28+, or Valibot (with `@valibot/to-json-schema`). The spec interfaces are vendored (copied in), so the package has zero dependencies and can equally be pasted into a project.
 
-The type is the proposal. Like Standard Schema, StandardTool is fundamentally this interface: anything that produces or consumes a matching object interoperates, with no dependency. The `standardTool()` function used throughout is a reference implementation, a convenient way to build a conforming tool with validation and output formatting, not a required runtime.
+The type is the proposal. Like Standard Schema, StandardTool is fundamentally this interface: anything that produces or consumes a matching object interoperates, with no dependency. The `standardTool()` function used throughout is a reference implementation — a convenient way to build a conforming tool that validates its I/O, with opt-in formatting via `.formatted()`, not a required runtime. Its return value carries two extras beyond the normative type — the unformatted execute and `.formatted()`, so a tool that has been formatted for one consumer can still be re-targeted for another — but the interface above stays formatting-free, so any plain object can satisfy it.
 
-`execute` validates input, runs your logic, validates output, then formats the result. By default, errors become `{ error }` so a model loop keeps running. The schemas are returned untouched, so any consumer can reach JSON Schema synchronously:
+`execute` validates input, runs your logic, validates output, and returns the validated `Output`, throwing on a violation. Formatting that result for a consumer — turning a failure into `{ error }`, or shaping an MCP envelope — is an opt-in step (`.formatted()`) that lives outside this neutral shape, because formatting is what binds a tool to a particular consumer. The schemas are returned untouched, so any consumer can reach JSON Schema synchronously:
 
 ```ts
 tool.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' }); // or 'openapi-3.0', 'draft-07'
@@ -254,17 +254,18 @@ tools: [{
   parameters: getWeather.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' }),
 }]
 // on a tool call:
-const result = await getWeather.execute(JSON.parse(call.arguments)); // validates args + result
+const result = await getWeather.formatted().execute(JSON.parse(call.arguments)); // validates args + result; bad args → { error }
 ```
 
-(b) An MCP server. Give the tool an MCP `formatOutput` (so `execute` returns a `{ content, structuredContent, isError }` result), then hand the Standard Schema straight to `registerTool`:
+(b) An MCP server. Format the tool for MCP with `.formatted()` (so `execute` returns a `{ content, structuredContent, isError }` result), then hand the Standard Schema straight to `registerTool`:
 
 ```ts
-server.registerTool(getWeather.name, {
-  title: getWeather.title,
-  description: getWeather.description,
-  inputSchema: getWeather.inputSchema, // a Standard Schema; the SDK emits JSON Schema from it
-}, (args) => getWeather.execute(args)); // → { content, structuredContent, isError } (see the MCP formatter in the README)
+const mcp = getWeather.formatted(toMcpResult); // toMcpResult: the text-only formatter from the README
+server.registerTool(mcp.name, {
+  title: mcp.title,
+  description: mcp.description,
+  inputSchema: mcp.inputSchema, // a Standard Schema; the SDK emits JSON Schema from it
+}, (args) => mcp.execute(args)); // → { content, structuredContent, isError }
 ```
 
 (c) A Vercel AI SDK adapter. Wrap the neutral shape into `tool()`:
@@ -282,7 +283,8 @@ const aiTool = tool({
 
 ```ts
 expect(await getWeather.execute({ city: 'Paris' })).toEqual({ tempC: 21 });
-expect(await getWeather.execute({ city: 123 as any })).toMatchObject({ error: expect.any(String) });
+await expect(getWeather.execute({ city: 123 as any })).rejects.toThrow(); // a neutral tool throws on bad input
+expect(await getWeather.formatted().execute({ city: 123 as any })).toMatchObject({ error: expect.any(String) }); // or, as data
 ```
 
 (e) Derived from an existing API. A derive-from-API layer can emit StandardTool-shaped objects from typed RPC procedures or imported OpenAPI specs, so an existing backend becomes a tool catalog without hand-writing wrappers.
@@ -316,7 +318,7 @@ Why not just extend an existing tool primitive? Mastra's `createTool` and the AI
 ## 8. Open questions
 
 - Should `meta` be `unknown` (safer) or `any` (frictionless)? Currently `any`, since tools are invoked by a model or runtime, not hand-called in typed code.
-- Should result-formatting live in the tool at all, or always be a separate step?
+- Should formatting be carried on the tool at all? The reference keeps the normative `StandardTool` formatting-free and puts `.formatted()` plus the carried unformatted execute on `standardTool()`'s richer return, so a neutral tool stays a plain object and a formatted one can still be re-targeted — but whether that belongs on the tool or in a fully separate utility is a judgment call.
 
 ---
 

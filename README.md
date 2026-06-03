@@ -333,7 +333,7 @@ That's the exact shape an MCP server returns from a `tools/call` handler, so a S
 
 ## With the OpenAI API
 
-Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). Because every tool is the same neutral shape, you keep them in one array, `.map` it into the request's `tools`, then dispatch each function call back to the matching tool by `name`. Adding a fourth tool is one more array entry, with no special-casing and no per-tool wiring. And by formatting each call with the default `{ error }` envelope (`tool.formatted()`), a malformed tool call comes back as data and goes to the model to self-correct rather than crashing your loop.
+Uses the [Responses API](https://developers.openai.com/api/docs/guides/function-calling). Because every tool is the same neutral shape, you keep them in one array, `.map` it into the request's `tools`, then dispatch each function call back to the matching tool by `name`. Adding a fourth tool is one more array entry, with no special-casing and no per-tool wiring. And by formatting each call with the default `{ error }` envelope (`tool.formatted()`), an argument that fails the tool's schema comes back as data for the model to fix rather than throwing — `JSON.parse` runs first, so guard it if the model might emit invalid JSON.
 
 ```ts
 import OpenAI from 'openai';
@@ -387,7 +387,7 @@ for (const item of res.output) {
   if (item.type !== 'function_call') continue;
   const tool = tools.find((t) => t.name === item.name);
   if (!tool) continue;
-  const result = await tool.formatted().execute(JSON.parse(item.arguments)); // bad args → { error }, so the model self-corrects
+  const result = await tool.formatted().execute(JSON.parse(item.arguments)); // schema-invalid args → { error }, so the model self-corrects
   input.push({ type: 'function_call_output', call_id: item.call_id, output: JSON.stringify(result) });
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "standard-tool",
   "version": "0.0.4",
-  "description": "Standard DRY LLM Tool Interface — name/description/execute with input & output validated via Standard Schema and emitted as JSON Schema via Standard JSON Schema. Zero dependencies.",
+  "description": "Standard DRY LLM Tool Interface \u2014 name/description/execute with input & output validated via Standard Schema and emitted as JSON Schema via Standard JSON Schema. Zero dependencies.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -52,6 +52,8 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
     "@types/node": "^25.9.1",
+    "dotenv": "^8.2.0",
+    "node-fetch": "^3.3.2",
     "typescript": "^6.0.2",
     "zod": "^4.4.3"
   }

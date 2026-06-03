@@ -24,7 +24,7 @@ export const tools: FormattableStandardTool[] = [
     description: 'Get the current temperature for a city.',
     inputSchema: z.object({ city: z.string() }),
     outputSchema: z.object({ tempC: z.number() }),
-    execute: async ({ city }) => ({ tempC: 21 }), // call your real weather API here
+    execute: async ({ city }) => ({ tempC: 21 }),
   }),
   standardTool({
     name: 'get_time',
@@ -38,7 +38,7 @@ export const tools: FormattableStandardTool[] = [
     description: 'Convert an amount between two currencies.',
     inputSchema: z.object({ amount: z.number(), from: z.string(), to: z.string() }),
     outputSchema: z.object({ amount: z.number() }),
-    execute: async ({ amount }) => ({ amount: Math.round(amount * 1.08 * 100) / 100 }), // call your real FX API here
+    execute: async ({ amount }) => ({ amount: Math.round(amount * 1.08 * 100) / 100 }),
   }),
 ];
 ```
@@ -77,7 +77,6 @@ for (const call of res.choices[0].message.tool_calls ?? []) {
   if (call.type !== 'function') continue;
   const tool = tools.find((t) => t.name === call.function.name);
   if (!tool) continue;
-  // execute is the only validation — OpenAI doesn't check args; schema-invalid args come back as { error }
   const result = await tool.formatted().execute(JSON.parse(call.function.arguments));
   messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
 }
@@ -152,7 +151,7 @@ for (const block of res.content) {
   if (block.type !== 'tool_use') continue;
   const tool = tools.find((t) => t.name === block.name);
   if (!tool) continue;
-  const result = await tool.formatted().execute(block.input); // block.input is unknown; execute validates it
+  const result = await tool.formatted().execute(block.input);
   results.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
 }
 messages.push({ role: 'user', content: results });
@@ -179,13 +178,7 @@ const { text } = await generateText({
   tools: Object.fromEntries(
     tools.map(({ name, description, inputSchema, executeUnformatted }) => [
       name,
-      tool({
-        description,
-        // inputSchema is a Standard Schema — the SDK takes it directly to describe and validate the tool;
-        // executeUnformatted returns the tool's raw Output (not a formatted envelope) for the SDK to handle
-        inputSchema,
-        execute: executeUnformatted,
-      }),
+      tool({ description, inputSchema, execute: executeUnformatted }),
     ]),
   ),
 });

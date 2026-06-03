@@ -1,5 +1,7 @@
 # Overview: why StandardTool
 
+> 🚧 **Work in progress — not ready to present.** The core API (how tools validate and format their I/O) is being actively redesigned and will change. Don't build on the current shape yet.
+
 > **Status: proposal (RFC).** This document is the rationale behind StandardTool. It argues a position, names the trade-offs honestly, and tries to survey the whole landscape rather than one happy path. If it's wrong somewhere, that's the feedback worth opening an issue over.
 
 ## TL;DR

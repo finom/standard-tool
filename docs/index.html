@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>standard-tool</title>
+<title>StandardTool</title>
 <meta name="description" content="A common type for defining LLM tools, built on Standard Schema and Standard JSON Schema.">
-<meta property="og:title" content="standard-tool">
+<meta property="og:title" content="StandardTool">
 <meta property="og:description" content="A common type for defining LLM tools, built on Standard Schema and Standard JSON Schema.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%2309090b'/><text x='8' y='12' font-size='10' text-anchor='middle' fill='%23fafafa' font-family='monospace'>%7B%7D</text></svg>">
 <style>:root{--bg:#09090b;--bg-deep:#030712;--fg:#fafafa;--muted:#a1a1aa;--border:#6b7280;--line:#27272a;--mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
@@ -66,18 +66,18 @@ footer a:hover{color:var(--fg)}
 <body>
 <div class="wrap">
 <header class="nav">
-<a class="brand" href="./">standard-tool</a>
+<a class="brand" href="./">StandardTool</a>
 <nav class="nav-links"><a class="btn" href="./overview.html">Overview</a><a class="btn" href="https://github.com/finom/standard-tool">GitHub</a><a class="btn" href="https://www.npmjs.com/package/standard-tool">npm</a></nav>
 </header>
 <main class="md">
-<h1 dir="auto" id="standard-tool">standard-tool  <a href="https://www.npmjs.com/package/standard-tool" rel="nofollow"><img src="https://camo.githubusercontent.com/c9078e4a78c9f6a535fad394b3198896e77f1bbc77b7c8664c0e79d32a84321c/68747470733a2f2f696d672e736869656c64732e696f2f6e706d2f762f7374616e646172642d746f6f6c" alt="npm" data-canonical-src="https://img.shields.io/npm/v/standard-tool" style="max-width: 100%;"></a> <a href="https://github.com/finom/standard-tool/actions/workflows/ci.yml"><img src="https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg" alt="CI" style="max-width: 100%;"></a></h1>
+<h1 dir="auto" id="standardtool">StandardTool  <a href="https://www.npmjs.com/package/standard-tool" rel="nofollow"><img src="https://camo.githubusercontent.com/c9078e4a78c9f6a535fad394b3198896e77f1bbc77b7c8664c0e79d32a84321c/68747470733a2f2f696d672e736869656c64732e696f2f6e706d2f762f7374616e646172642d746f6f6c" alt="npm" data-canonical-src="https://img.shields.io/npm/v/standard-tool" style="max-width: 100%;"></a> <a href="https://github.com/finom/standard-tool/actions/workflows/ci.yml"><img src="https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg" alt="CI" style="max-width: 100%;"></a></h1>
 <blockquote>
 <p dir="auto"><strong>Status: proposal (RFC).</strong> This is an early proposal for a shared, framework-agnostic way to define LLM tools. It's published to gather feedback and pressure-test the design, not as a finished standard, so the shape may still change. Issues, critiques, and counter-proposals are welcome.</p>
 </blockquote>
 <blockquote>
 <p dir="auto">A common type for defining LLM tools, built on <a href="https://standardschema.dev" rel="nofollow">Standard Schema</a> and <a href="https://standardschema.dev/json-schema" rel="nofollow">Standard JSON Schema</a>.</p>
 </blockquote>
-<p dir="auto"><code class="notranslate">standard-tool</code> is a common type for defining LLM tools, meant to be produced and consumed by any framework, SDK, or app.</p>
+<p dir="auto">StandardTool is a common type for defining LLM tools, meant to be produced and consumed by any framework, SDK, or app.</p>
 <p dir="auto">The goal is to define a tool once and use it anywhere, across providers and frameworks, instead of writing a separate, incompatible tool object for each one. It builds on <a href="https://standardschema.dev" rel="nofollow">Standard Schema</a> and <a href="https://standardschema.dev/json-schema" rel="nofollow">Standard JSON Schema</a>: the optional <code class="notranslate">inputSchema</code> and <code class="notranslate">outputSchema</code> both validate their data and emit JSON Schema for the model.</p>
 <p dir="auto">Standard Schema is the shared validation interface that Zod, Valibot, and ArkType implement, and this proposal follows the same idea. It's an interface, not a library you depend on, so you can conform to it with a plain object and zero dependencies. The package also ships a small reference implementation, the <code class="notranslate">standardTool()</code> function, which builds a conforming tool with input and output validation and error handling included.</p>
 <div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">standardTool</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'standard-tool'</span><span class="pl-kos">;</span>
@@ -100,7 +100,7 @@ footer a:hover{color:var(--fg)}
 <li>Emits JSON Schema for any model: because the schemas implement Standard JSON Schema, you get an OpenAI- or MCP-ready JSON Schema synchronously via <code class="notranslate">inputSchema['~standard'].jsonSchema.input(...)</code>.</li>
 </ul>
 <h2 dir="auto" id="why">Why</h2>
-<p dir="auto">Every LLM framework ships its own tool object: Vercel AI SDK, MCP, oRPC, Effect. Each is a different shape, none portable, most welded to the framework. But the hard part, schema interop, is already solved by Standard Schema for validation and Standard JSON Schema for JSON Schema emission. <code class="notranslate">standard-tool</code> is a neutral wrapper around them, small enough to become a shared convention rather than another framework lock-in.</p>
+<p dir="auto">Every LLM framework ships its own tool object: Vercel AI SDK, MCP, oRPC, Effect. Each is a different shape, none portable, most welded to the framework. But the hard part, schema interop, is already solved by Standard Schema for validation and Standard JSON Schema for JSON Schema emission. StandardTool is a neutral wrapper around them, small enough to become a shared convention rather than another framework lock-in.</p>
 <h2 dir="auto" id="install">Install</h2>
 <div class="highlight highlight-source-shell" dir="auto"><pre class="notranslate">npm i standard-tool
 <span class="pl-c"><span class="pl-c">#</span> bring any library that implements BOTH Standard Schema and Standard JSON Schema:</span>
@@ -274,7 +274,7 @@ npm i zod          <span class="pl-c"><span class="pl-c">#</span> 4.2+   (or `ar
 
 <span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// { tempC: number }; rejects on bad input/output</span></pre></div>
 <h2 dir="auto" id="mcp-compatible-output">MCP-compatible output</h2>
-<p dir="auto"><a href="https://modelcontextprotocol.io" rel="nofollow">MCP</a> tools return a structured result envelope, <code class="notranslate">{ content, structuredContent?, isError? }</code>, not just raw data. A <code class="notranslate">formatOutput</code> can map <code class="notranslate">execute</code>'s result onto that shape, so a <code class="notranslate">standard-tool</code> is consumable by an MCP server with no translation. The formatter below is text-only: an object result is JSON-encoded into a text block and also mirrored into <code class="notranslate">structuredContent</code> (per MCP's <a href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content" rel="nofollow">backwards-compatibility guidance</a>), errors come back with <code class="notranslate">isError: true</code> (a self-correctable tool error), and image, audio, and resource blocks are out of scope.</p>
+<p dir="auto"><a href="https://modelcontextprotocol.io" rel="nofollow">MCP</a> tools return a structured result envelope, <code class="notranslate">{ content, structuredContent?, isError? }</code>, not just raw data. A <code class="notranslate">formatOutput</code> can map <code class="notranslate">execute</code>'s result onto that shape, so a StandardTool is consumable by an MCP server with no translation. The formatter below is text-only: an object result is JSON-encoded into a text block and also mirrored into <code class="notranslate">structuredContent</code> (per MCP's <a href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content" rel="nofollow">backwards-compatibility guidance</a>), errors come back with <code class="notranslate">isError: true</code> (a self-correctable tool error), and image, audio, and resource blocks are out of scope.</p>
 <div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">type</span> <span class="pl-smi">McpToolResult</span> <span class="pl-c1">=</span> <span class="pl-kos">{</span>
   <span class="pl-c1">content</span>: <span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'text'</span><span class="pl-kos">;</span> <span class="pl-c1">text</span>: <span class="pl-smi">string</span> <span class="pl-kos">}</span><span class="pl-kos">[</span><span class="pl-kos">]</span><span class="pl-kos">;</span>
   <span class="pl-c1">structuredContent</span>?: <span class="pl-smi">Record</span><span class="pl-c1">&lt;</span><span class="pl-smi">string</span><span class="pl-kos">,</span> <span class="pl-smi">unknown</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>
@@ -312,7 +312,7 @@ npm i zod          <span class="pl-c"><span class="pl-c">#</span> 4.2+   (or `ar
 <span class="pl-c">//</span>
 <span class="pl-c">// bad input, a thrown error, or invalid output instead →</span>
 <span class="pl-c">// → { content: [{ type: 'text', text: 'input validation failed: ...' }], isError: true }</span></pre></div>
-<p dir="auto">That's the exact shape an MCP server returns from a <code class="notranslate">tools/call</code> handler, so a <code class="notranslate">standard-tool</code> drops straight in. Wiring it into a specific MCP SDK is out of scope here.</p>
+<p dir="auto">That's the exact shape an MCP server returns from a <code class="notranslate">tools/call</code> handler, so a StandardTool drops straight in. Wiring it into a specific MCP SDK is out of scope here.</p>
 <h2 dir="auto" id="with-the-openai-api">With the OpenAI API</h2>
 <p dir="auto">Uses the <a href="https://developers.openai.com/api/docs/guides/function-calling" rel="nofollow">Responses API</a>. Because every tool is the same neutral shape, you keep them in one array, <code class="notranslate">.map</code> it into the request's <code class="notranslate">tools</code>, then dispatch each function call back to the matching tool by <code class="notranslate">name</code>. Adding a fourth tool is one more array entry, with no special-casing and no per-tool wiring. And because <code class="notranslate">execute</code> returns <code class="notranslate">{ error }</code> instead of throwing by default, a malformed tool call goes back to the model to self-correct rather than crashing your loop (a custom <code class="notranslate">formatOutput</code> can opt back into throwing).</p>
 <div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-v">OpenAI</span> <span class="pl-k">from</span> <span class="pl-s">'openai'</span><span class="pl-kos">;</span>
@@ -381,7 +381,7 @@ npm i zod          <span class="pl-c"><span class="pl-c">#</span> 4.2+   (or `ar
 <h2 dir="auto" id="license">License</h2>
 <p dir="auto">MIT © Andrey Gubanov</p>
 </main>
-<a class="card" href="./overview.html"><div><h3>Overview</h3><p>Why standard-tool exists, and the landscape it fits into.</p></div><span class="arrow">&rarr;</span></a>
+<a class="card" href="./overview.html"><div><h3>Overview</h3><p>Why StandardTool exists, and the landscape it fits into.</p></div><span class="arrow">&rarr;</span></a>
 <footer>
 <a href="https://github.com/finom/standard-tool">GitHub</a>
 <a href="https://www.npmjs.com/package/standard-tool">npm</a>

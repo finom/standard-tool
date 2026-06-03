@@ -121,7 +121,7 @@ function page({ title, description, nav, bodyHtml, cta }) {
 <body>
 <div class="wrap">
 <header class="nav">
-<a class="brand" href="./">standard-tool</a>
+<a class="brand" href="./">StandardTool</a>
 <nav class="nav-links">${nav}</nav>
 </header>
 <main class="md">
@@ -144,7 +144,7 @@ const gh = `<a class="btn" href="https://github.com/finom/standard-tool">GitHub<
 const npm = `<a class="btn" href="https://www.npmjs.com/package/standard-tool">npm</a>`;
 const overviewBtn = `<a class="btn" href="./overview.html">Overview</a>`;
 const homeBtn = `<a class="btn" href="./">README</a>`;
-const overviewCard = `<a class="card" href="./overview.html"><div><h3>Overview</h3><p>Why standard-tool exists, and the landscape it fits into.</p></div><span class="arrow">&rarr;</span></a>`;
+const overviewCard = `<a class="card" href="./overview.html"><div><h3>Overview</h3><p>Why StandardTool exists, and the landscape it fits into.</p></div><span class="arrow">&rarr;</span></a>`;
 const homeCard = `<a class="card" href="./"><div><h3>Get started</h3><p>Install, the type, and the reference implementation.</p></div><span class="arrow">&rarr;</span></a>`;
 
 const readmeMd = readFileSync(join(root, 'README.md'), 'utf8');
@@ -154,7 +154,7 @@ const [readmeHtml, overviewHtml] = await Promise.all([render(readmeMd), render(o
 writeFileSync(
   join(docs, 'index.html'),
   page({
-    title: 'standard-tool',
+    title: 'StandardTool',
     description: 'A common type for defining LLM tools, built on Standard Schema and Standard JSON Schema.',
     nav: overviewBtn + gh + npm,
     bodyHtml: readmeHtml,
@@ -164,8 +164,8 @@ writeFileSync(
 writeFileSync(
   join(docs, 'overview.html'),
   page({
-    title: 'Overview · standard-tool',
-    description: 'Why standard-tool exists: the landscape, the diagnosis, and the case for a neutral tool type.',
+    title: 'Overview · StandardTool',
+    description: 'Why StandardTool exists: the landscape, the diagnosis, and the case for a neutral tool type.',
     nav: homeBtn + gh + npm,
     bodyHtml: overviewHtml,
     cta: homeCard,

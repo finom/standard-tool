@@ -1,10 +1,10 @@
-# standard-tool &nbsp;[![npm](https://img.shields.io/npm/v/standard-tool)](https://www.npmjs.com/package/standard-tool) [![CI](https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/finom/standard-tool/actions/workflows/ci.yml)
+# StandardTool &nbsp;[![npm](https://img.shields.io/npm/v/standard-tool)](https://www.npmjs.com/package/standard-tool) [![CI](https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/finom/standard-tool/actions/workflows/ci.yml)
 
 > **Status: proposal (RFC).** This is an early proposal for a shared, framework-agnostic way to define LLM tools. It's published to gather feedback and pressure-test the design, not as a finished standard, so the shape may still change. Issues, critiques, and counter-proposals are welcome.
 
 > A common type for defining LLM tools, built on [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema).
 
-`standard-tool` is a common type for defining LLM tools, meant to be produced and consumed by any framework, SDK, or app.
+StandardTool is a common type for defining LLM tools, meant to be produced and consumed by any framework, SDK, or app.
 
 The goal is to define a tool once and use it anywhere, across providers and frameworks, instead of writing a separate, incompatible tool object for each one. It builds on [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema): the optional `inputSchema` and `outputSchema` both validate their data and emit JSON Schema for the model.
 
@@ -34,7 +34,7 @@ await getWeather.execute({ city: 'Paris' }); // → { tempC: number } | { error:
 
 ## Why
 
-Every LLM framework ships its own tool object: Vercel AI SDK, MCP, oRPC, Effect. Each is a different shape, none portable, most welded to the framework. But the hard part, schema interop, is already solved by Standard Schema for validation and Standard JSON Schema for JSON Schema emission. `standard-tool` is a neutral wrapper around them, small enough to become a shared convention rather than another framework lock-in.
+Every LLM framework ships its own tool object: Vercel AI SDK, MCP, oRPC, Effect. Each is a different shape, none portable, most welded to the framework. But the hard part, schema interop, is already solved by Standard Schema for validation and Standard JSON Schema for JSON Schema emission. StandardTool is a neutral wrapper around them, small enough to become a shared convention rather than another framework lock-in.
 
 ## Install
 
@@ -202,7 +202,7 @@ await getWeather.execute({ city: 'Paris' }); // { tempC: number }; rejects on ba
 
 ## MCP-compatible output
 
-[MCP](https://modelcontextprotocol.io) tools return a structured result envelope, `{ content, structuredContent?, isError? }`, not just raw data. A `formatOutput` can map `execute`'s result onto that shape, so a `standard-tool` is consumable by an MCP server with no translation. The formatter below is text-only: an object result is JSON-encoded into a text block and also mirrored into `structuredContent` (per MCP's [backwards-compatibility guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), errors come back with `isError: true` (a self-correctable tool error), and image, audio, and resource blocks are out of scope.
+[MCP](https://modelcontextprotocol.io) tools return a structured result envelope, `{ content, structuredContent?, isError? }`, not just raw data. A `formatOutput` can map `execute`'s result onto that shape, so a StandardTool is consumable by an MCP server with no translation. The formatter below is text-only: an object result is JSON-encoded into a text block and also mirrored into `structuredContent` (per MCP's [backwards-compatibility guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), errors come back with `isError: true` (a self-correctable tool error), and image, audio, and resource blocks are out of scope.
 
 ```ts
 type McpToolResult = {
@@ -248,7 +248,7 @@ await getWeather.execute({ city: 'Paris' });
 // → { content: [{ type: 'text', text: 'input validation failed: ...' }], isError: true }
 ```
 
-That's the exact shape an MCP server returns from a `tools/call` handler, so a `standard-tool` drops straight in. Wiring it into a specific MCP SDK is out of scope here.
+That's the exact shape an MCP server returns from a `tools/call` handler, so a StandardTool drops straight in. Wiring it into a specific MCP SDK is out of scope here.
 
 ## With the OpenAI API
 

@@ -67,7 +67,7 @@ const res = await client.chat.completions.create({
     function: {
       name: tool.name,
       description: tool.description,
-      parameters: tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) ?? {},
+      parameters: tool.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' }),
     },
   })),
 });
@@ -105,7 +105,7 @@ const res = await client.responses.create({
     type: 'function',
     name: tool.name,
     description: tool.description,
-    parameters: tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) ?? {},
+    parameters: tool.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' }),
     strict: false,
   })),
 });
@@ -142,10 +142,7 @@ const res = await client.messages.create({
   tools: tools.map((tool): Anthropic.Tool => ({
     name: tool.name,
     description: tool.description,
-    input_schema: (tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) ?? {
-      type: 'object',
-      properties: {},
-    }) as Anthropic.Tool.InputSchema,
+    input_schema: tool.inputSchema!['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) as Anthropic.Tool.InputSchema,
   })),
 });
 
@@ -168,10 +165,10 @@ console.log(final.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).jo
 
 The AI SDK (version 6) runs the tool loop itself: give `generateText` a set of tools and a `stopWhen` condition and it calls them and feeds results back until the model answers.
 
-The thing to get right is validation. The SDK validates a tool's input against `inputSchema` before calling `execute` — but only when that schema carries a validator. Since `execute` already validates, hand the SDK the emitted JSON Schema through `jsonSchema()` (which has no validator), so the SDK only uses it to describe the tool to the model and `execute` validates exactly once.
+A tool's `inputSchema` is already a Standard Schema, and the SDK accepts one directly — it derives the model-facing JSON Schema and validates the model's arguments from it. Pass it as-is, and give `execute` the tool's `executeUnformatted`, which runs the tool and returns its raw `Output` (not a formatted `{ error }` envelope) for the SDK to surface.
 
 ```ts
-import { generateText, tool, jsonSchema, stepCountIs } from 'ai';
+import { generateText, tool, stepCountIs } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { tools } from './tools';
 
@@ -184,9 +181,9 @@ const { text } = await generateText({
       t.name,
       tool({
         description: t.description,
-        // jsonSchema() has no validator, so the SDK only describes the tool; executeUnformatted runs the
-        // tool's raw validated execution — the one validation, and it stays raw even if the tool is formatted
-        inputSchema: jsonSchema(t.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) ?? {}),
+        // inputSchema is a Standard Schema — the SDK takes it directly to describe and validate the tool;
+        // executeUnformatted returns the tool's raw Output (not a formatted envelope) for the SDK to handle
+        inputSchema: t.inputSchema!,
         execute: (args) => t.executeUnformatted(args),
       }),
     ]),
@@ -205,7 +202,7 @@ A StandardTool maps onto the Model Context Protocol with the same two parts:
 
 ## Notes
 
-- **Validate once.** OpenAI and Anthropic don't check tool arguments against your schema, so `execute` is the validation — that's why the examples call it on the model's raw args. A framework that *does* validate from the schema would validate twice if `execute` also ran; pass the JSON Schema through `jsonSchema()` with no validator (as in the Vercel example) so the framework only describes the tool and `execute` validates once.
+- **Who validates.** OpenAI and Anthropic don't check tool arguments against your schema, so `formatted().execute` is the only validation — that's why those examples call it on the model's raw args. The AI SDK validates from the schema you give it, so passing the tool's `inputSchema` straight in lets it both describe and validate the tool.
 - **Errors as data.** `execute` throws on a schema-invalid argument or result; `formatted().execute` returns `{ error }` instead, so an invalid argument goes back to the model to fix. `JSON.parse` runs before `execute`, so guard it if the model might emit invalid JSON syntax — that throws before `execute` can turn it into `{ error }`.
 - **JSON Schema targets.** `{ target: 'draft-2020-12' }` fits OpenAI and Anthropic; use `'openapi-3.0'` for consumers that want the OpenAPI subset (such as Gemini), or `'draft-07'`.
 - **Per-call context.** Pass data the model shouldn't see (an auth token, tenant, locale) as the second argument to `execute(input, meta)`. It's never validated and never in the JSON Schema.

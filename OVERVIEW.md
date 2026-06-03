@@ -279,8 +279,8 @@ import { tool } from 'ai';
 const aiTool = tool({
   description: getWeather.description,
   // inputSchema is a Standard Schema — the SDK takes it directly; executeUnformatted is the raw validated run
-  inputSchema: getWeather.inputSchema!,
-  execute: (input) => getWeather.executeUnformatted(input),
+  inputSchema: getWeather.inputSchema,
+  execute: getWeather.executeUnformatted,
 });
 ```
 

@@ -223,14 +223,14 @@ footer a:hover{color:var(--fg)}
   <span class="pl-c1">prompt</span>: <span class="pl-s">'What is the weather in Paris?'</span><span class="pl-kos">,</span>
   <span class="pl-c1">stopWhen</span>: <span class="pl-en">stepCountIs</span><span class="pl-kos">(</span><span class="pl-c1">5</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
   <span class="pl-c1">tools</span>: <span class="pl-v">Object</span><span class="pl-kos">.</span><span class="pl-en">fromEntries</span><span class="pl-kos">(</span>
-    <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">map</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">t</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">[</span>
-      <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">,</span>
+    <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">map</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-kos">{</span> name<span class="pl-kos">,</span> description<span class="pl-kos">,</span> inputSchema<span class="pl-kos">,</span> executeUnformatted <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">[</span>
+      <span class="pl-s1">name</span><span class="pl-kos">,</span>
       <span class="pl-en">tool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
-        <span class="pl-c1">description</span>: <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">description</span><span class="pl-kos">,</span>
+        description<span class="pl-kos">,</span>
         <span class="pl-c">// inputSchema is a Standard Schema — the SDK takes it directly to describe and validate the tool;</span>
         <span class="pl-c">// executeUnformatted returns the tool's raw Output (not a formatted envelope) for the SDK to handle</span>
-        <span class="pl-c1">inputSchema</span>: <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-c1">!</span><span class="pl-kos">,</span>
-        <span class="pl-en">execute</span>: <span class="pl-kos">(</span><span class="pl-s1">args</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-en">executeUnformatted</span><span class="pl-kos">(</span><span class="pl-s1">args</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+        inputSchema<span class="pl-kos">,</span>
+        <span class="pl-c1">execute</span>: <span class="pl-s1">executeUnformatted</span><span class="pl-kos">,</span>
       <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
     <span class="pl-kos">]</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
   <span class="pl-kos">)</span><span class="pl-kos">,</span>

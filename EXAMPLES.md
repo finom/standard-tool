@@ -177,14 +177,14 @@ const { text } = await generateText({
   prompt: 'What is the weather in Paris?',
   stopWhen: stepCountIs(5),
   tools: Object.fromEntries(
-    tools.map((t) => [
-      t.name,
+    tools.map(({ name, description, inputSchema, executeUnformatted }) => [
+      name,
       tool({
-        description: t.description,
+        description,
         // inputSchema is a Standard Schema — the SDK takes it directly to describe and validate the tool;
         // executeUnformatted returns the tool's raw Output (not a formatted envelope) for the SDK to handle
-        inputSchema: t.inputSchema!,
-        execute: (args) => t.executeUnformatted(args),
+        inputSchema,
+        execute: executeUnformatted,
       }),
     ]),
   ),

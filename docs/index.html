@@ -20,11 +20,6 @@ header.nav{display:flex;align-items:center;justify-content:space-between;gap:16p
 .nav-links{display:flex;gap:8px;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--border);border-radius:6px;padding:5px 11px;color:var(--fg);text-decoration:none;font-size:13px;line-height:1}
 .btn:hover{background:rgba(255,255,255,.06)}
-.card{display:flex;align-items:center;justify-content:space-between;gap:16px;border:2px solid var(--border);border-radius:4px;padding:16px 20px;color:var(--fg);text-decoration:none;margin:40px 0 0}
-.card:hover{background:rgba(255,255,255,.045)}
-.card h3{margin:0 0 4px;font-size:18px;font-weight:600}
-.card p{margin:0;font-size:13px;color:var(--muted)}
-.card .arrow{font-size:20px;opacity:.8}
 footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--muted);display:flex;gap:18px;flex-wrap:wrap;align-items:center}
 footer a{color:var(--muted)}
 footer a:hover{color:var(--fg)}
@@ -67,7 +62,7 @@ footer a:hover{color:var(--fg)}
 <div class="wrap">
 <header class="nav">
 <a class="brand" href="./">StandardTool</a>
-<nav class="nav-links"><a class="btn" href="./overview.html">Overview</a><a class="btn" href="./examples.html">Examples</a><a class="btn" href="https://github.com/finom/standard-tool">GitHub</a><a class="btn" href="https://www.npmjs.com/package/standard-tool">npm</a></nav>
+<nav class="nav-links"><a class="btn" href="https://github.com/finom/standard-tool">GitHub</a><a class="btn" href="https://www.npmjs.com/package/standard-tool">npm</a></nav>
 </header>
 <main class="md">
 <h1 dir="auto" id="standardtool">StandardTool</h1>
@@ -79,6 +74,10 @@ footer a:hover{color:var(--fg)}
 </blockquote>
 <p dir="auto">StandardTool is a common <strong>type</strong> for defining LLM tools, meant to be produced and consumed by any framework, SDK, or app. Define a tool once and use it anywhere — across providers and frameworks — instead of writing a separate, incompatible tool object for each.</p>
 <p dir="auto">It builds on <a href="https://standardschema.dev" rel="nofollow">Standard Schema</a> and <a href="https://standardschema.dev/json-schema" rel="nofollow">Standard JSON Schema</a>: the optional <code class="notranslate">inputSchema</code> and <code class="notranslate">outputSchema</code> both validate their data and emit JSON Schema for the model. Like Standard Schema — the shared validation interface Zod, Valibot, and ArkType implement — it's an interface, not a library you depend on, so you can conform with a plain object and zero dependencies.</p>
+<h2 dir="auto" id="why">Why</h2>
+<p dir="auto">Every LLM and agent ecosystem ships its own tool object — Vercel AI SDK, MCP, oRPC, Effect, Mastra, Genkit, LangChain. The shapes are all different, none is portable, and most are welded to a framework or a vendor SDK. Yet they describe the same handful of things: a name, a description, an input schema, an optional output schema, an <code class="notranslate">execute</code> function, and a little metadata.</p>
+<p dir="auto">The genuinely hard part of that list — schema interop — is already solved. <a href="https://standardschema.dev" rel="nofollow">Standard Schema</a> unifies validation, and <a href="https://standardschema.dev/json-schema" rel="nofollow">Standard JSON Schema</a> unifies JSON Schema emission; together they handle the two jobs a tool's schemas must do at once: tell a model how to call the tool, and validate the untrusted arguments it sends back. Once the schemas are Standard (JSON) Schema objects, everything left in a tool is a string, a string, and a function.</p>
+<p dir="auto">So the effort is inverted. Frameworks pour energy into re-inventing the trivial envelope and binding it to their runtime, while the part that could justify a framework is already a shared, neutral interface. StandardTool applies the Standard Schema move one level up — it standardizes the envelope too, as a neutral, dependency-free interface with no runtime, so a tool authored once can be produced or consumed by anything. It's about 30 lines, small enough to be a shared convention rather than another lock-in. (<a href="#the-landscape">The landscape</a> backs this up in detail.)</p>
 <h2 dir="auto" id="the-type">The type</h2>
 <p dir="auto">The convention <em>is</em> the type. Any object of this shape is a StandardTool — no base class, no runtime, no package required:</p>
 <div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">interface</span> <span class="pl-smi">StandardTool</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span> <span class="pl-c1">=</span> <span class="pl-smi">unknown</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span> <span class="pl-c1">=</span> <span class="pl-smi">unknown</span><span class="pl-kos">,</span> <span class="pl-smi">FormattedOutput</span> <span class="pl-c1">=</span> <span class="pl-smi">Output</span><span class="pl-c1">&gt;</span> <span class="pl-kos">{</span>
@@ -89,18 +88,12 @@ footer a:hover{color:var(--fg)}
   <span class="pl-c1">outputSchema</span>?: <span class="pl-smi">CombinedSpec</span><span class="pl-c1">&lt;</span><span class="pl-smi">Output</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span> <span class="pl-c">// validates Output + emits JSON Schema</span>
   <span class="pl-c1">execute</span><span class="pl-kos">(</span><span class="pl-s1">input</span>: <span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-s1">meta</span>?: <span class="pl-smi">unknown</span><span class="pl-kos">)</span>: <span class="pl-smi">FormattedOutput</span> <span class="pl-c1">|</span> <span class="pl-smi">Promise</span><span class="pl-c1">&lt;</span><span class="pl-smi">FormattedOutput</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>
 <span class="pl-kos">}</span></pre></div>
-<p dir="auto"><code class="notranslate">execute</code> takes the model's <code class="notranslate">Input</code> and returns the tool's result. Both schemas are optional; when present they validate runtime data (a model's arguments are untrusted input) and emit a model-ready JSON Schema synchronously via <code class="notranslate">inputSchema['~standard'].jsonSchema.input(...)</code>. <code class="notranslate">CombinedSpec&lt;T&gt;</code> is just "a schema that does both" — Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ (via <code class="notranslate">@valibot/to-json-schema</code>). It's a convention, not a framework: it owns the shape and nothing else — it won't run your agent, call your model, or own your runtime.</p>
-<p dir="auto">A tool is <strong>neutral</strong> when <code class="notranslate">FormattedOutput = Output</code>: <code class="notranslate">execute</code> returns the raw <code class="notranslate">Output</code>. The third parameter lets the same type describe a <strong>formatted</strong> tool too — one whose <code class="notranslate">execute</code> returns a consumer-specific shape (an MCP envelope, or <code class="notranslate">{ error }</code> on failure). Producing those is the job of the secondary type.</p>
-<h2 dir="auto" id="formattablestandardtool">FormattableStandardTool</h2>
-<p dir="auto"><code class="notranslate">FormattableStandardTool</code> is a <code class="notranslate">StandardTool</code> that knows how to (re-)format itself. From one definition it gives you three kinds of tool: a <strong>neutral</strong> one, a <strong>formatted</strong> one, and a <strong>re-formatted</strong> one — a tool already formatted for one consumer, re-targeted for another.</p>
-<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">interface</span> <span class="pl-smi">FormattableStandardTool</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span> <span class="pl-c1">=</span> <span class="pl-smi">unknown</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span> <span class="pl-c1">=</span> <span class="pl-smi">unknown</span><span class="pl-kos">,</span> <span class="pl-smi">FormattedOutput</span> <span class="pl-c1">=</span> <span class="pl-smi">Output</span><span class="pl-c1">&gt;</span>
-  <span class="pl-k">extends</span> <span class="pl-smi">StandardTool</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span><span class="pl-kos">,</span> <span class="pl-smi">FormattedOutput</span><span class="pl-c1">&gt;</span> <span class="pl-kos">{</span>
-  <span class="pl-c1">executeRaw</span><span class="pl-kos">(</span><span class="pl-s1">input</span>: <span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-s1">meta</span>?: <span class="pl-smi">unknown</span><span class="pl-kos">)</span>: <span class="pl-smi">Output</span> <span class="pl-c1">|</span> <span class="pl-smi">Promise</span><span class="pl-c1">&lt;</span><span class="pl-smi">Output</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>  <span class="pl-c">// the bare handler — no validation</span>
-  <span class="pl-c1">formatted</span><span class="pl-c1">&lt;</span><span class="pl-smi">F</span><span class="pl-c1">&gt;</span><span class="pl-kos">(</span><span class="pl-s1">format</span>?: <span class="pl-kos">(</span><span class="pl-s1">result</span>: <span class="pl-smi">Output</span> <span class="pl-c1">|</span> <span class="pl-smi">Error</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-smi">F</span> <span class="pl-c1">|</span> <span class="pl-smi">Promise</span><span class="pl-c1">&lt;</span><span class="pl-smi">F</span><span class="pl-c1">&gt;</span><span class="pl-kos">)</span>: <span class="pl-smi">FormattableStandardTool</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span><span class="pl-kos">,</span> <span class="pl-smi">F</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>
-<span class="pl-kos">}</span></pre></div>
-<p dir="auto">It carries <code class="notranslate">executeRaw</code> (the bare handler, no validation) for frameworks that validate their own way, and a <code class="notranslate">.formatted()</code> that re-derives from the validated <code class="notranslate">execute</code> — so formatting never stacks on formatting. A tool a framework shipped pre-formatted for itself can still be re-targeted by you, or run raw. Both members are additive, so every <code class="notranslate">FormattableStandardTool</code> is also a valid <code class="notranslate">StandardTool</code>.</p>
-<h2 dir="auto" id="reference-implementation-standardtool">Reference implementation: <code class="notranslate">standardTool()</code></h2>
-<p dir="auto">The standard is the type above — anything that produces a matching object interoperates. As a convenience the package ships a reference implementation: <code class="notranslate">standardTool()</code> builds a conforming <code class="notranslate">FormattableStandardTool</code> that validates input and output and throws on a violation. It's dependency-free (the Standard Schema interfaces are vendored in), or <a href="#or-just-copy-paste-it">copy-paste it</a> instead of installing.</p>
+<p dir="auto"><code class="notranslate">execute</code> takes the model's <code class="notranslate">Input</code> and returns the tool's result. Both schemas are optional; when present they validate runtime data (a model's arguments are untrusted input) and emit a model-ready JSON Schema synchronously via <code class="notranslate">inputSchema['~standard'].jsonSchema.input(...)</code>. <code class="notranslate">CombinedSpec&lt;T&gt;</code> is just "a schema that does both" — implemented by Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ (via <code class="notranslate">@valibot/to-json-schema</code>). It's a convention, not a framework: it owns the shape and nothing else — it won't run your agent, call your model, or own your runtime.</p>
+<p dir="auto">The shape maps almost 1:1 onto MCP's <code class="notranslate">Tool</code> (<code class="notranslate">name</code>, <code class="notranslate">title</code>, <code class="notranslate">description</code>, <code class="notranslate">inputSchema</code>, <code class="notranslate">outputSchema</code>), which is why a StandardTool plugs into an MCP server with no translation and into provider APIs with a one-line <code class="notranslate">.map</code>.</p>
+<p dir="auto">A tool is <strong>neutral</strong> when <code class="notranslate">FormattedOutput = Output</code>: <code class="notranslate">execute</code> returns the raw <code class="notranslate">Output</code>. The third parameter lets the same type describe a <strong>formatted</strong> tool too — one whose <code class="notranslate">execute</code> returns a consumer-specific shape (an MCP envelope, or <code class="notranslate">{ error }</code> on failure). Producing those is the job of <a href="#the-formatting-layer"><code class="notranslate">FormattableStandardTool</code></a>. <code class="notranslate">StandardTool</code> is the normative surface; the <code class="notranslate">standardTool()</code> function below is only a reference implementation — anything that produces a matching object interoperates.</p>
+<h2 dir="auto" id="quick-start">Quick start</h2>
+<p dir="auto">Install with <code class="notranslate">npm i standard-tool</code> and a schema library (options <a href="#install">below</a>), or <a href="#zero-dependency-copy-paste">copy-paste the source</a> for zero dependencies.</p>
+<p dir="auto">The package ships a reference implementation, <code class="notranslate">standardTool()</code>, that builds a conforming tool which validates input and output and throws on a violation:</p>
 <div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">standardTool</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'standard-tool'</span><span class="pl-kos">;</span>
 <span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">z</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'zod'</span><span class="pl-kos">;</span>
 
@@ -112,18 +105,369 @@ footer a:hover{color:var(--fg)}
   <span class="pl-en">execute</span>: <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> city <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-c1">21</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span> <span class="pl-c">// `city` is typed; the return is validated</span>
 <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
 
-<span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → { tempC: number }; validated in &amp; out, throws on a violation</span>
+<span class="pl-c">// validated end to end; returns the raw Output and throws on bad input or output:</span>
+<span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → { tempC: number }</span>
 
-<span class="pl-c">// opt into a model-facing envelope when you want failures as data, not throws:</span>
-<span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → { tempC: number } | { error: string }</span></pre></div>
-<h2 dir="auto" id="why">Why</h2>
-<p dir="auto">Every LLM framework ships its own tool object: Vercel AI SDK, MCP, oRPC, Effect. Each is a different shape, none portable, most welded to the framework. But the hard part, schema interop, is already solved by Standard Schema for validation and Standard JSON Schema for JSON Schema emission. StandardTool is a neutral wrapper around them, small enough to become a shared convention rather than another framework lock-in.</p>
+<span class="pl-c">// want failures as data instead of throws? format it (see below):</span>
+<span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → { tempC: number } | { error: string }</span>
+
+<span class="pl-c">// JSON Schema for the model (Standard JSON Schema), synchronous (inputSchema is optional, hence `!`):</span>
+<span class="pl-k">const</span> <span class="pl-s1">parameters</span> <span class="pl-c1">=</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-c1">!</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<p dir="auto"><code class="notranslate">standardTool()</code> is dependency-free — the Standard Schema interfaces are vendored in.</p>
 <h2 dir="auto" id="install">Install</h2>
 <div class="highlight highlight-source-shell" dir="auto"><pre class="notranslate">npm i standard-tool
 <span class="pl-c"><span class="pl-c">#</span> bring any library that implements BOTH Standard Schema and Standard JSON Schema:</span>
 npm i zod          <span class="pl-c"><span class="pl-c">#</span> 4.2+   (or `arktype` 2.1.28+, or `valibot` + `@valibot/to-json-schema`)</span></pre></div>
-<h2 dir="auto" id="or-just-copy-paste-it">Or just copy-paste it</h2>
-<p dir="auto">No dependency at all. Paste this and import the spec types from the official, types-only <a href="https://github.com/standard-schema/standard-schema"><code class="notranslate">@standard-schema/spec</code></a> (<code class="notranslate">npm i -D @standard-schema/spec</code>):</p>
+<p dir="auto">Prefer no dependency at all? <a href="#zero-dependency-copy-paste">Copy-paste the ~70-line source</a> instead of installing.</p>
+<h2 dir="auto" id="the-formatting-layer">The formatting layer</h2>
+<p dir="auto"><code class="notranslate">StandardTool</code> stays minimal — <code class="notranslate">{ name, title?, description, inputSchema?, outputSchema?, execute }</code>, no methods — so anything can produce or consume one with a plain object and zero dependencies. The reference <code class="notranslate">standardTool()</code> returns a <strong><code class="notranslate">FormattableStandardTool</code></strong>: that same shape plus two additive members, so a <code class="notranslate">FormattableStandardTool</code> is always a valid <code class="notranslate">StandardTool</code>.</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">interface</span> <span class="pl-smi">FormattableStandardTool</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span> <span class="pl-c1">=</span> <span class="pl-smi">unknown</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span> <span class="pl-c1">=</span> <span class="pl-smi">unknown</span><span class="pl-kos">,</span> <span class="pl-smi">FormattedOutput</span> <span class="pl-c1">=</span> <span class="pl-smi">Output</span><span class="pl-c1">&gt;</span>
+  <span class="pl-k">extends</span> <span class="pl-smi">StandardTool</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span><span class="pl-kos">,</span> <span class="pl-smi">FormattedOutput</span><span class="pl-c1">&gt;</span> <span class="pl-kos">{</span>
+  <span class="pl-c1">executeRaw</span><span class="pl-kos">(</span><span class="pl-s1">input</span>: <span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-s1">meta</span>?: <span class="pl-smi">unknown</span><span class="pl-kos">)</span>: <span class="pl-smi">Output</span> <span class="pl-c1">|</span> <span class="pl-smi">Promise</span><span class="pl-c1">&lt;</span><span class="pl-smi">Output</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>  <span class="pl-c">// the bare handler — no validation</span>
+  <span class="pl-c1">formatted</span><span class="pl-c1">&lt;</span><span class="pl-smi">F</span><span class="pl-c1">&gt;</span><span class="pl-kos">(</span><span class="pl-s1">format</span>?: <span class="pl-kos">(</span><span class="pl-s1">result</span>: <span class="pl-smi">Output</span> <span class="pl-c1">|</span> <span class="pl-smi">Error</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-smi">F</span> <span class="pl-c1">|</span> <span class="pl-smi">Promise</span><span class="pl-c1">&lt;</span><span class="pl-smi">F</span><span class="pl-c1">&gt;</span><span class="pl-kos">)</span>: <span class="pl-smi">FormattableStandardTool</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span><span class="pl-kos">,</span> <span class="pl-smi">F</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span></pre></div>
+<p dir="auto">From one definition it yields three kinds of tool: a <strong>neutral</strong> one (<code class="notranslate">execute</code> returns the validated <code class="notranslate">Output</code>, throwing on a violation), a <strong>formatted</strong> one (<code class="notranslate">execute</code> returns a consumer-specific shape), and a <strong>re-formatted</strong> one (a tool already formatted for one consumer, re-targeted for another).</p>
+<ul dir="auto">
+<li><code class="notranslate">executeRaw</code> is the bare handler — your logic with <strong>no</strong> validation or formatting. Hand it to a framework that validates its own way (alongside <code class="notranslate">inputSchema</code>); formatting keeps it intact.</li>
+<li><code class="notranslate">formatted()</code> re-derives from the validated <code class="notranslate">execute</code>, so formatting never stacks on formatting. A tool a framework shipped pre-formatted for itself can still be re-targeted by you, or run raw.</li>
+</ul>
+<h3 dir="auto" id="formatting-the-result">Formatting the result</h3>
+<p dir="auto">A neutral tool like the <code class="notranslate">getWeather</code> above throws on a validation failure or a thrown error, and returns its own <code class="notranslate">Output</code> otherwise. That's the right default for typed code, but a model loop usually wants a failure to come back as <em>data</em> it can self-correct from, and some consumers (MCP) want a specific result envelope. <code class="notranslate">formatted()</code> is how you opt into that, without changing the tool's <code class="notranslate">Input</code> or <code class="notranslate">Output</code>:</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-c1">123</span> <span class="pl-kos">}</span> <span class="pl-k">as</span> <span class="pl-smi">never</span><span class="pl-kos">)</span><span class="pl-kos">;</span>             <span class="pl-c">// throws StandardToolValidationError</span>
+<span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-c1">123</span> <span class="pl-kos">}</span> <span class="pl-k">as</span> <span class="pl-smi">never</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → { error: 'input validation failed: …' }</span></pre></div>
+<p dir="auto"><code class="notranslate">formatted</code> takes any <code class="notranslate">(result: Output | Error) =&gt; FormattedOutput</code>. On success it receives the validated <code class="notranslate">Output</code>; on failure an <code class="notranslate">Error</code> (a <code class="notranslate">StandardToolValidationError</code> for validation failures, carrying <code class="notranslate">target</code> and the Standard Schema <code class="notranslate">issues</code>). With no formatter, the default <code class="notranslate">{ error }</code> envelope is used. The formatter's return type becomes the tool's third generic, <code class="notranslate">FormattedOutput</code>:</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-c">// reshape to anything</span>
+<span class="pl-k">const</span> <span class="pl-s1">asText</span> <span class="pl-c1">=</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">r</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-s1">r</span> <span class="pl-k">instanceof</span> <span class="pl-v">Error</span> ? <span class="pl-s">`error: <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">r</span><span class="pl-kos">.</span><span class="pl-c1">message</span><span class="pl-kos">}</span></span>`</span> : <span class="pl-s">`<span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">r</span><span class="pl-kos">.</span><span class="pl-c1">tempC</span><span class="pl-kos">}</span></span>°C`</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-k">await</span> <span class="pl-s1">asText</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → '21°C'</span>
+
+<span class="pl-c">// re-throw to keep throwing on failure (the escape hatch back to neutral behavior)</span>
+<span class="pl-k">const</span> <span class="pl-s1">strict</span> <span class="pl-c1">=</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">r</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">{</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">r</span> <span class="pl-k">instanceof</span> <span class="pl-v">Error</span><span class="pl-kos">)</span> <span class="pl-k">throw</span> <span class="pl-s1">r</span><span class="pl-kos">;</span>
+  <span class="pl-k">return</span> <span class="pl-s1">r</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<p dir="auto">Formatting swaps only that third generic; <code class="notranslate">Input</code> and <code class="notranslate">Output</code> are untouched, and the bare handler is carried along as <code class="notranslate">executeRaw</code>. So a formatted tool stays re-formattable, and the unvalidated handler stays reachable:</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">const</span> <span class="pl-s1">enveloped</span> <span class="pl-c1">=</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>                     <span class="pl-c">// { error } envelope</span>
+<span class="pl-k">await</span> <span class="pl-s1">enveloped</span><span class="pl-kos">.</span><span class="pl-en">executeRaw</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>                <span class="pl-c">// → { tempC: 21 } (the bare handler; no validation)</span>
+<span class="pl-k">await</span> <span class="pl-s1">enveloped</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-s1">asText</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → '21°C', re-derived from the validated Output</span></pre></div>
+<p dir="auto">Re-formatting <em>replaces</em>, it doesn't compose: each <code class="notranslate">formatted()</code> re-derives from the validated <code class="notranslate">execute</code>, never from the previous formatting. That's what lets a framework ship a tool pre-formatted for itself while you stay free to re-target it for another consumer — or run the bare <code class="notranslate">executeRaw</code>.</p>
+<h2 dir="auto" id="per-call-context-meta">Per-call context (<code class="notranslate">meta</code>)</h2>
+<p dir="auto">Tools often need per-call data that should not appear in the model-facing <code class="notranslate">inputSchema</code> — a locale, an auth token, a request-scoped DB handle. <code class="notranslate">execute</code> takes an optional second <code class="notranslate">meta</code> argument, forwarded verbatim to your handler. It's never validated and never part of the JSON Schema, so your tools can stay static (defined once at module scope) while you inject context at call time, instead of closing over it in a per-render factory.</p>
+<p dir="auto"><code class="notranslate">meta</code> is typed <code class="notranslate">unknown</code>. Annotate it on your handler to type it at the call site:</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">const</span> <span class="pl-s1">greet</span> <span class="pl-c1">=</span> <span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+  <span class="pl-c1">name</span>: <span class="pl-s">'greet'</span><span class="pl-kos">,</span>
+  <span class="pl-c1">description</span>: <span class="pl-s">'Greet a person in the caller-supplied locale'</span><span class="pl-kos">,</span>
+  <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">name</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-en">execute</span>: <span class="pl-kos">(</span><span class="pl-kos">{</span> name <span class="pl-kos">}</span><span class="pl-kos">,</span> <span class="pl-s1">meta</span>: <span class="pl-kos">{</span> <span class="pl-c1">locale</span>: <span class="pl-smi">string</span> <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-s1">meta</span><span class="pl-kos">.</span><span class="pl-c1">locale</span> <span class="pl-c1">===</span> <span class="pl-s">'fr'</span> ? <span class="pl-s">`bonjour <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">name</span><span class="pl-kos">}</span></span>`</span> : <span class="pl-s">`hi <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">name</span><span class="pl-kos">}</span></span>`</span><span class="pl-kos">)</span><span class="pl-kos">,</span> <span class="pl-c">// annotate meta here</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-k">await</span> <span class="pl-s1">greet</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">name</span>: <span class="pl-s">'Ada'</span> <span class="pl-kos">}</span><span class="pl-kos">,</span> <span class="pl-kos">{</span> <span class="pl-c1">locale</span>: <span class="pl-s">'fr'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → 'bonjour Ada'</span></pre></div>
+<p dir="auto">Tools that don't need it just call <code class="notranslate">execute(input)</code>; <code class="notranslate">meta</code> is optional.</p>
+<h2 dir="auto" id="one-tool-many-consumers">One tool, many consumers</h2>
+<p dir="auto">This is the payoff of a neutral shape: the same object flows everywhere. Below, one array of tools is wired into <a href="#openai">OpenAI</a>, <a href="#anthropic">Anthropic</a>, the <a href="#vercel-ai-sdk">Vercel AI SDK</a>, and <a href="#mcp">MCP</a> — the SDKs that accept a JSON Schema object or a Standard Schema directly. Each example keeps the tools in one array, maps it into the provider's request, and dispatches each tool call back by <code class="notranslate">name</code>, all inline. (An SDK that takes only a library-specific schema, such as a Zod raw shape, would need a per-library shim, so it's out of scope here.) In real code you'd factor these into your own abstractions; here they're spelled out.</p>
+<p dir="auto">Two parts of a tool do the work in every integration:</p>
+<ul dir="auto">
+<li><code class="notranslate">inputSchema['~standard'].jsonSchema.input({ target })</code> — the JSON Schema you hand the model so it knows how to call the tool.</li>
+<li><code class="notranslate">execute(args)</code> — runs the tool, validating the model's arguments and the result and throwing on a violation. <code class="notranslate">formatted().execute(args)</code> returns <code class="notranslate">{ error }</code> instead of throwing, which is usually what you want inside a model loop.</li>
+</ul>
+<blockquote>
+<p dir="auto">The examples assume you've installed the provider SDK you're using (<code class="notranslate">openai</code>, <code class="notranslate">@anthropic-ai/sdk</code>, or <code class="notranslate">ai</code> with <code class="notranslate">@ai-sdk/*</code>) plus <code class="notranslate">standard-tool</code> and <code class="notranslate">zod</code>. They use Zod, but the model only ever sees the JSON Schema a tool emits, so Valibot or ArkType work the same way.</p>
+</blockquote>
+<h3 dir="auto" id="the-shared-tools">The shared tools</h3>
+<p dir="auto">Define the tools once; every example below imports this array. Adding a fourth tool is one more array entry — no special-casing, no per-tool wiring.</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-c">// tools.ts</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">standardTool</span><span class="pl-kos">,</span> <span class="pl-k">type</span> <span class="pl-v">FormattableStandardTool</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'standard-tool'</span><span class="pl-kos">;</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">z</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'zod'</span><span class="pl-kos">;</span>
+
+<span class="pl-k">export</span> <span class="pl-k">const</span> <span class="pl-s1">tools</span>: <span class="pl-smi">FormattableStandardTool</span><span class="pl-kos">[</span><span class="pl-kos">]</span> <span class="pl-c1">=</span> <span class="pl-kos">[</span>
+  <span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+    <span class="pl-c1">name</span>: <span class="pl-s">'get_weather'</span><span class="pl-kos">,</span>
+    <span class="pl-c1">description</span>: <span class="pl-s">'Get the current temperature for a city.'</span><span class="pl-kos">,</span>
+    <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+    <span class="pl-c1">outputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">number</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+    <span class="pl-en">execute</span>: <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> city <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-c1">21</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+    <span class="pl-c1">name</span>: <span class="pl-s">'get_time'</span><span class="pl-kos">,</span>
+    <span class="pl-c1">description</span>: <span class="pl-s">'Get the current time in an IANA timezone.'</span><span class="pl-kos">,</span>
+    <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">timezone</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+    <span class="pl-c1">outputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">iso</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+    <span class="pl-en">execute</span>: <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> timezone <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">iso</span>: <span class="pl-k">new</span> <span class="pl-v">Date</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">toLocaleString</span><span class="pl-kos">(</span><span class="pl-s">'en-US'</span><span class="pl-kos">,</span> <span class="pl-kos">{</span> <span class="pl-c1">timeZone</span>: <span class="pl-s1">timezone</span> <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+    <span class="pl-c1">name</span>: <span class="pl-s">'convert_currency'</span><span class="pl-kos">,</span>
+    <span class="pl-c1">description</span>: <span class="pl-s">'Convert an amount between two currencies.'</span><span class="pl-kos">,</span>
+    <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">amount</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">number</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">,</span> <span class="pl-c1">from</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">,</span> <span class="pl-c1">to</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+    <span class="pl-c1">outputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">amount</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">number</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+    <span class="pl-en">execute</span>: <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> amount <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">amount</span>: <span class="pl-v">Math</span><span class="pl-kos">.</span><span class="pl-en">round</span><span class="pl-kos">(</span><span class="pl-s1">amount</span> <span class="pl-c1">*</span> <span class="pl-c1">1.08</span> <span class="pl-c1">*</span> <span class="pl-c1">100</span><span class="pl-kos">)</span> <span class="pl-c1">/</span> <span class="pl-c1">100</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+<span class="pl-kos">]</span><span class="pl-kos">;</span></pre></div>
+<h3 dir="auto" id="openai">OpenAI</h3>
+<h4 dir="auto" id="chat-completions">Chat Completions</h4>
+<p dir="auto">Tools go in under a <code class="notranslate">function</code> key; calls come back on <code class="notranslate">message.tool_calls</code>; each result is a <code class="notranslate">role: 'tool'</code> message.</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-v">OpenAI</span> <span class="pl-k">from</span> <span class="pl-s">'openai'</span><span class="pl-kos">;</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">tools</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'./tools'</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">client</span> <span class="pl-c1">=</span> <span class="pl-k">new</span> <span class="pl-v">OpenAI</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">messages</span>: <span class="pl-v">OpenAI</span><span class="pl-kos">.</span><span class="pl-c1">Chat</span><span class="pl-kos">.</span><span class="pl-smi">ChatCompletionMessageParam</span><span class="pl-kos">[</span><span class="pl-kos">]</span> <span class="pl-c1">=</span> <span class="pl-kos">[</span>
+  <span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'user'</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-s">'What is the weather in Paris?'</span> <span class="pl-kos">}</span><span class="pl-kos">,</span>
+<span class="pl-kos">]</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">res</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">chat</span><span class="pl-kos">.</span><span class="pl-c1">completions</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+  <span class="pl-c1">model</span>: <span class="pl-s">'gpt-5.5'</span><span class="pl-kos">,</span>
+  messages<span class="pl-kos">,</span>
+  <span class="pl-c1">tools</span>: <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">map</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">tool</span><span class="pl-kos">)</span>: <span class="pl-v">OpenAI</span><span class="pl-kos">.</span><span class="pl-c1">Chat</span><span class="pl-kos">.</span><span class="pl-smi">ChatCompletionTool</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span>
+    <span class="pl-c1">type</span>: <span class="pl-s">'function'</span><span class="pl-kos">,</span>
+    <span class="pl-c1">function</span>: <span class="pl-kos">{</span>
+      <span class="pl-c1">name</span>: <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">,</span>
+      <span class="pl-c1">description</span>: <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">description</span><span class="pl-kos">,</span>
+      <span class="pl-c1">parameters</span>: <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-c1">!</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+    <span class="pl-kos">}</span><span class="pl-kos">,</span>
+  <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-s1">messages</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">choices</span><span class="pl-kos">[</span><span class="pl-c1">0</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">message</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-k">for</span> <span class="pl-kos">(</span><span class="pl-k">const</span> <span class="pl-s1">call</span> <span class="pl-k">of</span> <span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">choices</span><span class="pl-kos">[</span><span class="pl-c1">0</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">message</span><span class="pl-kos">.</span><span class="pl-c1">tool_calls</span> <span class="pl-c1">??</span> <span class="pl-kos">[</span><span class="pl-kos">]</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">call</span><span class="pl-kos">.</span><span class="pl-c1">type</span> <span class="pl-c1">!==</span> <span class="pl-s">'function'</span><span class="pl-kos">)</span> <span class="pl-k">continue</span><span class="pl-kos">;</span>
+  <span class="pl-k">const</span> <span class="pl-s1">tool</span> <span class="pl-c1">=</span> <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">find</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">t</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">name</span> <span class="pl-c1">===</span> <span class="pl-s1">call</span><span class="pl-kos">.</span><span class="pl-c1">function</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-c1">!</span><span class="pl-s1">tool</span><span class="pl-kos">)</span> <span class="pl-k">continue</span><span class="pl-kos">;</span>
+  <span class="pl-k">const</span> <span class="pl-s1">result</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">parse</span><span class="pl-kos">(</span><span class="pl-s1">call</span><span class="pl-kos">.</span><span class="pl-c1">function</span><span class="pl-kos">.</span><span class="pl-c1">arguments</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-s1">messages</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'tool'</span><span class="pl-kos">,</span> <span class="pl-c1">tool_call_id</span>: <span class="pl-s1">call</span><span class="pl-kos">.</span><span class="pl-c1">id</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">stringify</span><span class="pl-kos">(</span><span class="pl-s1">result</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">final</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">chat</span><span class="pl-kos">.</span><span class="pl-c1">completions</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">model</span>: <span class="pl-s">'gpt-5.5'</span><span class="pl-kos">,</span> messages <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s1">final</span><span class="pl-kos">.</span><span class="pl-c1">choices</span><span class="pl-kos">[</span><span class="pl-c1">0</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">message</span><span class="pl-kos">.</span><span class="pl-c1">content</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<h4 dir="auto" id="responses-api">Responses API</h4>
+<p dir="auto">The Responses API is flatter — it drops the <code class="notranslate">function</code> wrapper and adds an optional <code class="notranslate">strict</code>. Tool calls arrive as <code class="notranslate">function_call</code> items in <code class="notranslate">res.output</code>, and results go back as <code class="notranslate">function_call_output</code>:</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-v">OpenAI</span> <span class="pl-k">from</span> <span class="pl-s">'openai'</span><span class="pl-kos">;</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">tools</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'./tools'</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">client</span> <span class="pl-c1">=</span> <span class="pl-k">new</span> <span class="pl-v">OpenAI</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">input</span>: <span class="pl-v">OpenAI</span><span class="pl-kos">.</span><span class="pl-c1">Responses</span><span class="pl-kos">.</span><span class="pl-smi">ResponseInput</span> <span class="pl-c1">=</span> <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'user'</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-s">'What is the weather in Paris?'</span> <span class="pl-kos">}</span><span class="pl-kos">]</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">res</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">responses</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+  <span class="pl-c1">model</span>: <span class="pl-s">'gpt-5.5'</span><span class="pl-kos">,</span>
+  input<span class="pl-kos">,</span>
+  <span class="pl-c1">tools</span>: <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">map</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">tool</span><span class="pl-kos">)</span>: <span class="pl-v">OpenAI</span><span class="pl-kos">.</span><span class="pl-c1">Responses</span><span class="pl-kos">.</span><span class="pl-smi">Tool</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span>
+    <span class="pl-c1">type</span>: <span class="pl-s">'function'</span><span class="pl-kos">,</span>
+    <span class="pl-c1">name</span>: <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">,</span>
+    <span class="pl-c1">description</span>: <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">description</span><span class="pl-kos">,</span>
+    <span class="pl-c1">parameters</span>: <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-c1">!</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+    <span class="pl-c1">strict</span>: <span class="pl-c1">false</span><span class="pl-kos">,</span>
+  <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-s1">input</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span>...<span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">output</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-k">for</span> <span class="pl-kos">(</span><span class="pl-k">const</span> <span class="pl-s1">item</span> <span class="pl-k">of</span> <span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">output</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">item</span><span class="pl-kos">.</span><span class="pl-c1">type</span> <span class="pl-c1">!==</span> <span class="pl-s">'function_call'</span><span class="pl-kos">)</span> <span class="pl-k">continue</span><span class="pl-kos">;</span>
+  <span class="pl-k">const</span> <span class="pl-s1">tool</span> <span class="pl-c1">=</span> <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">find</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">t</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">name</span> <span class="pl-c1">===</span> <span class="pl-s1">item</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-c1">!</span><span class="pl-s1">tool</span><span class="pl-kos">)</span> <span class="pl-k">continue</span><span class="pl-kos">;</span>
+  <span class="pl-k">const</span> <span class="pl-s1">result</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">parse</span><span class="pl-kos">(</span><span class="pl-s1">item</span><span class="pl-kos">.</span><span class="pl-c1">arguments</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-s1">input</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'function_call_output'</span><span class="pl-kos">,</span> <span class="pl-c1">call_id</span>: <span class="pl-s1">item</span><span class="pl-kos">.</span><span class="pl-c1">call_id</span><span class="pl-kos">,</span> <span class="pl-c1">output</span>: <span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">stringify</span><span class="pl-kos">(</span><span class="pl-s1">result</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">final</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">responses</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">model</span>: <span class="pl-s">'gpt-5.5'</span><span class="pl-kos">,</span> input <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s1">final</span><span class="pl-kos">.</span><span class="pl-c1">output_text</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<h3 dir="auto" id="anthropic">Anthropic</h3>
+<p dir="auto">The Messages API uses <code class="notranslate">input_schema</code> instead of <code class="notranslate">parameters</code>, returns <code class="notranslate">tool_use</code> blocks in the assistant's <code class="notranslate">content</code>, and expects <code class="notranslate">tool_result</code> blocks in a following <code class="notranslate">user</code> message.</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-v">Anthropic</span> <span class="pl-k">from</span> <span class="pl-s">'@anthropic-ai/sdk'</span><span class="pl-kos">;</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">tools</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'./tools'</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">client</span> <span class="pl-c1">=</span> <span class="pl-k">new</span> <span class="pl-v">Anthropic</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">messages</span>: <span class="pl-v">Anthropic</span><span class="pl-kos">.</span><span class="pl-smi">MessageParam</span><span class="pl-kos">[</span><span class="pl-kos">]</span> <span class="pl-c1">=</span> <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'user'</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-s">'What is the weather in Paris?'</span> <span class="pl-kos">}</span><span class="pl-kos">]</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">res</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">messages</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+  <span class="pl-c1">model</span>: <span class="pl-s">'claude-sonnet-4-6'</span><span class="pl-kos">,</span>
+  <span class="pl-c1">max_tokens</span>: <span class="pl-c1">1024</span><span class="pl-kos">,</span>
+  messages<span class="pl-kos">,</span>
+  <span class="pl-c1">tools</span>: <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">map</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">tool</span><span class="pl-kos">)</span>: <span class="pl-v">Anthropic</span><span class="pl-kos">.</span><span class="pl-smi">Tool</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span>
+    <span class="pl-c1">name</span>: <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">,</span>
+    <span class="pl-c1">description</span>: <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">description</span><span class="pl-kos">,</span>
+    <span class="pl-c1">input_schema</span>: <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-c1">!</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-k">as</span> <span class="pl-v">Anthropic</span><span class="pl-kos">.</span><span class="pl-smi">Tool</span><span class="pl-kos">.</span><span class="pl-c1">InputSchema</span><span class="pl-kos">,</span>
+  <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-s1">messages</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'assistant'</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">content</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-k">const</span> <span class="pl-s1">results</span>: <span class="pl-v">Anthropic</span><span class="pl-kos">.</span><span class="pl-smi">ToolResultBlockParam</span><span class="pl-kos">[</span><span class="pl-kos">]</span> <span class="pl-c1">=</span> <span class="pl-kos">[</span><span class="pl-kos">]</span><span class="pl-kos">;</span>
+<span class="pl-k">for</span> <span class="pl-kos">(</span><span class="pl-k">const</span> <span class="pl-s1">block</span> <span class="pl-k">of</span> <span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">content</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">block</span><span class="pl-kos">.</span><span class="pl-c1">type</span> <span class="pl-c1">!==</span> <span class="pl-s">'tool_use'</span><span class="pl-kos">)</span> <span class="pl-k">continue</span><span class="pl-kos">;</span>
+  <span class="pl-k">const</span> <span class="pl-s1">tool</span> <span class="pl-c1">=</span> <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">find</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">t</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">name</span> <span class="pl-c1">===</span> <span class="pl-s1">block</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-c1">!</span><span class="pl-s1">tool</span><span class="pl-kos">)</span> <span class="pl-k">continue</span><span class="pl-kos">;</span>
+  <span class="pl-k">const</span> <span class="pl-s1">result</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-s1">block</span><span class="pl-kos">.</span><span class="pl-c1">input</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-s1">results</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'tool_result'</span><span class="pl-kos">,</span> <span class="pl-c1">tool_use_id</span>: <span class="pl-s1">block</span><span class="pl-kos">.</span><span class="pl-c1">id</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">stringify</span><span class="pl-kos">(</span><span class="pl-s1">result</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span>
+<span class="pl-s1">messages</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'user'</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-s1">results</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">final</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">messages</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">model</span>: <span class="pl-s">'claude-sonnet-4-6'</span><span class="pl-kos">,</span> <span class="pl-c1">max_tokens</span>: <span class="pl-c1">1024</span><span class="pl-kos">,</span> messages <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s1">final</span><span class="pl-kos">.</span><span class="pl-c1">content</span><span class="pl-kos">.</span><span class="pl-en">flatMap</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">b</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-s1">b</span><span class="pl-kos">.</span><span class="pl-c1">type</span> <span class="pl-c1">===</span> <span class="pl-s">'text'</span> ? <span class="pl-kos">[</span><span class="pl-s1">b</span><span class="pl-kos">.</span><span class="pl-c1">text</span><span class="pl-kos">]</span> : <span class="pl-kos">[</span><span class="pl-kos">]</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">join</span><span class="pl-kos">(</span><span class="pl-s">''</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<h3 dir="auto" id="vercel-ai-sdk">Vercel AI SDK</h3>
+<p dir="auto">The AI SDK (version 6) runs the tool loop itself: give <code class="notranslate">generateText</code> a set of tools and a <code class="notranslate">stopWhen</code> condition and it calls them and feeds results back until the model answers.</p>
+<p dir="auto">A tool's <code class="notranslate">inputSchema</code> is already a Standard Schema, and the SDK accepts one directly — it derives the model-facing JSON Schema and validates the model's arguments from it. So pass <code class="notranslate">inputSchema</code> as-is and give <code class="notranslate">execute</code> the tool's <code class="notranslate">executeRaw</code> — the bare handler. The SDK has already validated the arguments, so <code class="notranslate">executeRaw</code> skips a second check and just runs (the SDK doesn't validate the output either way).</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">generateText</span><span class="pl-kos">,</span> <span class="pl-s1">tool</span><span class="pl-kos">,</span> <span class="pl-s1">stepCountIs</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'ai'</span><span class="pl-kos">;</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">openai</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'@ai-sdk/openai'</span><span class="pl-kos">;</span>
+<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">tools</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'./tools'</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-kos">{</span> text <span class="pl-kos">}</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-en">generateText</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+  <span class="pl-c1">model</span>: <span class="pl-en">openai</span><span class="pl-kos">(</span><span class="pl-s">'gpt-5.5'</span><span class="pl-kos">)</span><span class="pl-kos">,</span> <span class="pl-c">// or anthropic('claude-sonnet-4-6')</span>
+  <span class="pl-c1">prompt</span>: <span class="pl-s">'What is the weather in Paris?'</span><span class="pl-kos">,</span>
+  <span class="pl-c1">stopWhen</span>: <span class="pl-en">stepCountIs</span><span class="pl-kos">(</span><span class="pl-c1">5</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-c1">tools</span>: <span class="pl-v">Object</span><span class="pl-kos">.</span><span class="pl-en">fromEntries</span><span class="pl-kos">(</span>
+    <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">map</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-kos">{</span> name<span class="pl-kos">,</span> description<span class="pl-kos">,</span> inputSchema<span class="pl-kos">,</span> executeRaw <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">[</span>
+      <span class="pl-s1">name</span><span class="pl-kos">,</span>
+      <span class="pl-en">tool</span><span class="pl-kos">(</span><span class="pl-kos">{</span> description<span class="pl-kos">,</span> inputSchema<span class="pl-kos">,</span> <span class="pl-c1">execute</span>: <span class="pl-s1">executeRaw</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+    <span class="pl-kos">]</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-kos">)</span><span class="pl-kos">,</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s1">text</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<h3 dir="auto" id="mcp">MCP</h3>
+<p dir="auto"><a href="https://modelcontextprotocol.io" rel="nofollow">MCP</a> tools return a structured result envelope, <code class="notranslate">{ content, structuredContent?, isError? }</code>, not just raw data, and a descriptor whose <code class="notranslate">inputSchema</code>/<code class="notranslate">outputSchema</code> are JSON Schema. A StandardTool maps onto both with the same two parts:</p>
+<ul dir="auto">
+<li><strong><code class="notranslate">tools/list</code></strong> — <code class="notranslate">inputSchema['~standard'].jsonSchema.input({ target })</code> (and <code class="notranslate">.output({ target })</code>) give the JSON Schema for the descriptor (<code class="notranslate">name</code>, <code class="notranslate">title</code>, <code class="notranslate">description</code>).</li>
+<li><strong><code class="notranslate">tools/call</code></strong> — a <code class="notranslate">.formatted(toMcpResult)</code> formatter maps <code class="notranslate">execute</code>'s result onto the envelope, so <code class="notranslate">execute</code> returns a value shaped exactly like an MCP <code class="notranslate">CallToolResult</code>.</li>
+</ul>
+<p dir="auto">The formatter below is text-only: an object result is JSON-encoded into a text block and also mirrored into <code class="notranslate">structuredContent</code> (per MCP's <a href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content" rel="nofollow">backwards-compatibility guidance</a>), errors come back with <code class="notranslate">isError: true</code> (a self-correctable tool error), and image, audio, and resource blocks are out of scope.</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">type</span> <span class="pl-smi">McpToolResult</span> <span class="pl-c1">=</span> <span class="pl-kos">{</span>
+  <span class="pl-c1">content</span>: <span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'text'</span><span class="pl-kos">;</span> <span class="pl-c1">text</span>: <span class="pl-smi">string</span> <span class="pl-kos">}</span><span class="pl-kos">[</span><span class="pl-kos">]</span><span class="pl-kos">;</span>
+  <span class="pl-c1">structuredContent</span>?: <span class="pl-smi">Record</span><span class="pl-c1">&lt;</span><span class="pl-smi">string</span><span class="pl-kos">,</span> <span class="pl-smi">unknown</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>
+  <span class="pl-c1">isError</span>?: <span class="pl-smi">boolean</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span><span class="pl-kos">;</span>
+
+<span class="pl-c">// A plain function; pass it to .formatted() (which infers FormattedOutput from the return type).</span>
+<span class="pl-c">// `result` is your Output, or an Error (validation/exec failure).</span>
+<span class="pl-k">const</span> <span class="pl-en">toMcpResult</span> <span class="pl-c1">=</span> <span class="pl-kos">(</span><span class="pl-s1">result</span>: <span class="pl-smi">unknown</span><span class="pl-kos">)</span>: <span class="pl-smi">McpToolResult</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">{</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">result</span> <span class="pl-k">instanceof</span> <span class="pl-v">Error</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+    <span class="pl-k">return</span> <span class="pl-kos">{</span> <span class="pl-c1">content</span>: <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'text'</span><span class="pl-kos">,</span> <span class="pl-c1">text</span>: <span class="pl-s1">result</span><span class="pl-kos">.</span><span class="pl-c1">message</span> <span class="pl-kos">}</span><span class="pl-kos">]</span><span class="pl-kos">,</span> <span class="pl-c1">isError</span>: <span class="pl-c1">true</span> <span class="pl-kos">}</span><span class="pl-kos">;</span> <span class="pl-c">// tool error the model can self-correct</span>
+  <span class="pl-kos">}</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-k">typeof</span> <span class="pl-s1">result</span> <span class="pl-c1">===</span> <span class="pl-s">'string'</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+    <span class="pl-k">return</span> <span class="pl-kos">{</span> <span class="pl-c1">content</span>: <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'text'</span><span class="pl-kos">,</span> <span class="pl-c1">text</span>: <span class="pl-s1">result</span> <span class="pl-kos">}</span><span class="pl-kos">]</span> <span class="pl-kos">}</span><span class="pl-kos">;</span>
+  <span class="pl-kos">}</span>
+  <span class="pl-k">const</span> <span class="pl-s1">text</span> <span class="pl-c1">=</span> <span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">stringify</span><span class="pl-kos">(</span><span class="pl-s1">result</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">result</span> <span class="pl-c1">!==</span> <span class="pl-c1">null</span> <span class="pl-c1">&amp;&amp;</span> <span class="pl-k">typeof</span> <span class="pl-s1">result</span> <span class="pl-c1">===</span> <span class="pl-s">'object'</span> <span class="pl-c1">&amp;&amp;</span> <span class="pl-c1">!</span><span class="pl-v">Array</span><span class="pl-kos">.</span><span class="pl-en">isArray</span><span class="pl-kos">(</span><span class="pl-s1">result</span><span class="pl-kos">)</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+    <span class="pl-k">return</span> <span class="pl-kos">{</span> <span class="pl-c1">content</span>: <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'text'</span><span class="pl-kos">,</span> text <span class="pl-kos">}</span><span class="pl-kos">]</span><span class="pl-kos">,</span> <span class="pl-c1">structuredContent</span>: <span class="pl-s1">result</span> <span class="pl-k">as</span> <span class="pl-smi">Record</span><span class="pl-c1">&lt;</span><span class="pl-smi">string</span><span class="pl-kos">,</span> <span class="pl-smi">unknown</span><span class="pl-c1">&gt;</span> <span class="pl-kos">}</span><span class="pl-kos">;</span>
+  <span class="pl-kos">}</span>
+  <span class="pl-k">return</span> <span class="pl-kos">{</span> <span class="pl-c1">content</span>: <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'text'</span><span class="pl-kos">,</span> text <span class="pl-kos">}</span><span class="pl-kos">]</span> <span class="pl-kos">}</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span><span class="pl-kos">;</span></pre></div>
+<p dir="auto">Apply it and wire the two methods. <code class="notranslate">execute</code> validates once, so don't also register a validating schema for the same call:</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">tools</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'./tools'</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">mcpTools</span> <span class="pl-c1">=</span> <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">map</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">t</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-s1">toMcpResult</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-c">// tools/list — MCP's Tool is a JSON Schema object, so emit it directly. (The high-level registerTool helper</span>
+<span class="pl-c">// instead wants a Zod raw shape and would validate a second time; going through JSON Schema stays</span>
+<span class="pl-c">// library-agnostic and leaves execute the single validator.)</span>
+<span class="pl-k">const</span> <span class="pl-s1">descriptors</span> <span class="pl-c1">=</span> <span class="pl-s1">mcpTools</span><span class="pl-kos">.</span><span class="pl-en">map</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">t</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span>
+  <span class="pl-c1">name</span>: <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">,</span>
+  <span class="pl-c1">title</span>: <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">title</span><span class="pl-kos">,</span>
+  <span class="pl-c1">description</span>: <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">description</span><span class="pl-kos">,</span>
+  <span class="pl-c1">inputSchema</span>: <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-c1">!</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+<span class="pl-c">// tools/call — execute validates once, then returns the MCP result shape</span>
+<span class="pl-k">async</span> <span class="pl-k">function</span> <span class="pl-en">call</span><span class="pl-kos">(</span><span class="pl-s1">name</span>: <span class="pl-smi">string</span><span class="pl-kos">,</span> <span class="pl-s1">args</span>: <span class="pl-smi">unknown</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+  <span class="pl-k">const</span> <span class="pl-s1">tool</span> <span class="pl-c1">=</span> <span class="pl-s1">mcpTools</span><span class="pl-kos">.</span><span class="pl-en">find</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">t</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">name</span> <span class="pl-c1">===</span> <span class="pl-s1">name</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-c1">!</span><span class="pl-s1">tool</span><span class="pl-kos">)</span> <span class="pl-k">throw</span> <span class="pl-k">new</span> <span class="pl-v">Error</span><span class="pl-kos">(</span><span class="pl-s">`Unknown tool: <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">name</span><span class="pl-kos">}</span></span>`</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-k">return</span> <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-s1">args</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → { content: [{ type: 'text', text: '{"tempC":21}' }<span class="pl-smi">], structuredContent: { tempC: 21 } </span>}</span>
+<span class="pl-kos">}</span></pre></div>
+<p dir="auto">That's the exact shape an MCP server returns from a <code class="notranslate">tools/call</code> handler, so a StandardTool drops straight in. Wiring it into a specific MCP SDK is out of scope here.</p>
+<h3 dir="auto" id="testing">Testing</h3>
+<p dir="auto">No model, no framework — just data in and out:</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">tools</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'./tools'</span><span class="pl-kos">;</span>
+
+<span class="pl-k">const</span> <span class="pl-s1">getWeather</span> <span class="pl-c1">=</span> <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">find</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">t</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">name</span> <span class="pl-c1">===</span> <span class="pl-s">'get_weather'</span><span class="pl-kos">)</span><span class="pl-c1">!</span><span class="pl-kos">;</span>
+
+<span class="pl-en">expect</span><span class="pl-kos">(</span><span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">toEqual</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-c1">21</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-k">await</span> <span class="pl-en">expect</span><span class="pl-kos">(</span><span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-c1">123</span> <span class="pl-k">as</span> <span class="pl-smi">never</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-c1">rejects</span><span class="pl-kos">.</span><span class="pl-en">toThrow</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>                       <span class="pl-c">// a neutral tool throws on bad input</span>
+<span class="pl-en">expect</span><span class="pl-kos">(</span><span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-c1">123</span> <span class="pl-k">as</span> <span class="pl-smi">never</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">toMatchObject</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">error</span>: <span class="pl-s1">expect</span><span class="pl-kos">.</span><span class="pl-en">any</span><span class="pl-kos">(</span><span class="pl-v">String</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// or, as data</span></pre></div>
+<h3 dir="auto" id="derived-from-an-existing-api">Derived from an existing API</h3>
+<p dir="auto">A derive-from-API layer can emit StandardTool-shaped objects from typed RPC procedures or imported OpenAPI specs, so an existing backend becomes a tool catalog without hand-writing wrappers. Broaden the lens and the same shape also underwrites a shareable tool registry (publish reusable tools as plain objects, not framework plugins), cross-runtime use (zero deps, so it runs in the browser, on the edge, in workers), and multi-target apps that must speak to several providers and an MCP endpoint from one definition.</p>
+<h3 dir="auto" id="notes">Notes</h3>
+<ul dir="auto">
+<li><strong>Who validates.</strong> OpenAI and Anthropic don't check tool arguments against your schema, so <code class="notranslate">formatted().execute</code> is the only validation — that's why those examples call it on the model's raw args. The AI SDK validates <strong>input</strong> from the schema you give it (it doesn't enforce output), so you hand it <code class="notranslate">inputSchema</code> to describe and validate the call, plus <code class="notranslate">executeRaw</code> — the bare handler — to avoid validating the same input twice.</li>
+<li><strong>Errors as data.</strong> <code class="notranslate">execute</code> throws on a schema-invalid argument or result; <code class="notranslate">formatted().execute</code> returns <code class="notranslate">{ error }</code> instead, so an invalid argument goes back to the model to fix. <code class="notranslate">JSON.parse</code> runs before <code class="notranslate">execute</code>, so guard it if the model might emit invalid JSON syntax — that throws before <code class="notranslate">execute</code> can turn it into <code class="notranslate">{ error }</code>.</li>
+<li><strong>JSON Schema targets.</strong> <code class="notranslate">{ target: 'draft-2020-12' }</code> fits OpenAI and Anthropic; use <code class="notranslate">'openapi-3.0'</code> for consumers that want the OpenAPI subset (such as Gemini), or <code class="notranslate">'draft-07'</code>.</li>
+<li><strong>Per-call context.</strong> Pass data the model shouldn't see (an auth token, tenant, locale) as the second argument to <code class="notranslate">execute(input, meta)</code>. It's never validated and never in the JSON Schema (see <a href="#per-call-context-meta">Per-call context</a>).</li>
+</ul>
+<h2 dir="auto" id="api">API</h2>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">standardTool</span><span class="pl-kos">,</span> <span class="pl-k">type</span> <span class="pl-v">StandardTool</span><span class="pl-kos">,</span> <span class="pl-k">type</span> <span class="pl-v">FormattableStandardTool</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'standard-tool'</span><span class="pl-kos">;</span>
+
+<span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-s1">def</span><span class="pl-kos">)</span>: <span class="pl-v">FormattableStandardTool</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>          <span class="pl-c">// reference impl: validates in &amp; out, throws on a violation</span>
+<span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-s1">format</span>?<span class="pl-kos">)</span>: <span class="pl-v">FormattableStandardTool</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span><span class="pl-kos">,</span> <span class="pl-smi">F</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span> <span class="pl-c">// opt into a consumer-specific result (or { error } envelope)</span></pre></div>
+<p dir="auto"><code class="notranslate">Input</code> and <code class="notranslate">Output</code> are your data types: what your <code class="notranslate">execute</code> accepts and returns. The optional schemas describe them. A neutral tool's <code class="notranslate">execute</code> validates both, returns the validated <code class="notranslate">Output</code>, and throws on a violation. It also takes an optional second <code class="notranslate">meta</code> argument — per-call runtime context forwarded verbatim to your handler, never validated and never in the JSON Schema (see <a href="#per-call-context-meta">Per-call context</a>).</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>field</th>
+<th>type</th>
+<th>purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="notranslate">name</code></td>
+<td><code class="notranslate">string</code></td>
+<td>tool name sent to the model</td>
+</tr>
+<tr>
+<td><code class="notranslate">title?</code></td>
+<td><code class="notranslate">string</code></td>
+<td>optional human-readable label, surfaced by MCP clients in tool-list UIs; ignored by plain function-calling APIs</td>
+</tr>
+<tr>
+<td><code class="notranslate">inputSchema?</code></td>
+<td><code class="notranslate">CombinedSpec&lt;Input&gt;</code></td>
+<td>optional input schema; validates and emits JSON Schema</td>
+</tr>
+<tr>
+<td><code class="notranslate">outputSchema?</code></td>
+<td><code class="notranslate">CombinedSpec&lt;Output&gt;</code></td>
+<td>optional output schema; validates and emits JSON Schema</td>
+</tr>
+<tr>
+<td><code class="notranslate">description</code></td>
+<td><code class="notranslate">string</code></td>
+<td>what the tool does</td>
+</tr>
+<tr>
+<td><code class="notranslate">execute</code> (yours)</td>
+<td><code class="notranslate">(input: Input, meta?: unknown) =&gt; Output | Promise&lt;Output&gt;</code></td>
+<td>your logic; receives validated input and the optional per-call <code class="notranslate">meta</code> (annotate it to type it), returns the output</td>
+</tr>
+<tr>
+<td><code class="notranslate">execute</code> (tool)</td>
+<td><code class="notranslate">(input: Input, meta?: unknown) =&gt; Promise&lt;Output&gt;</code></td>
+<td>validate in, run yours (forwarding <code class="notranslate">meta</code>), validate out; returns the validated <code class="notranslate">Output</code>, throwing a <code class="notranslate">StandardToolValidationError</code> on a violation</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p dir="auto"><code class="notranslate">inputSchema</code> and <code class="notranslate">outputSchema</code> are optional. When present they must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via <code class="notranslate">@valibot/to-json-schema</code>). <code class="notranslate">Input</code> and <code class="notranslate">Output</code> are inferred from them, or from <code class="notranslate">execute</code> when a schema is omitted.</p>
+<p dir="auto">The reference <code class="notranslate">standardTool()</code> returns a <code class="notranslate">FormattableStandardTool</code> — the normative shape plus two additive members:</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>member</th>
+<th>type</th>
+<th>purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="notranslate">executeRaw</code></td>
+<td><code class="notranslate">(input: Input, meta?: unknown) =&gt; Output | Promise&lt;Output&gt;</code></td>
+<td>the bare handler — runs your logic with <strong>no</strong> validation or formatting. Hand it to a framework that validates its own way (alongside <code class="notranslate">inputSchema</code>); formatting keeps it intact</td>
+</tr>
+<tr>
+<td><code class="notranslate">formatted</code></td>
+<td><code class="notranslate">(format?) =&gt; FormattableStandardTool&lt;Input, Output, F&gt;</code></td>
+<td>opt into a consumer-specific result; see <a href="#formatting-the-result">Formatting the result</a></td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p dir="auto">The thrown <code class="notranslate">StandardToolValidationError</code> carries <code class="notranslate">target: 'input' \| 'output'</code> and the Standard Schema <code class="notranslate">issues</code>, so a formatter (or a <code class="notranslate">catch</code>) can build a rich result.</p>
+<h2 dir="auto" id="zero-dependency-copy-paste">Zero-dependency copy-paste</h2>
+<p dir="auto">No dependency at all. Paste this and import the spec types from the official, types-only <a href="https://github.com/standard-schema/standard-schema"><code class="notranslate">@standard-schema/spec</code></a> (<code class="notranslate">npm i -D @standard-schema/spec</code>). It's the same logic as the published package, with the vendored interfaces swapped for that import:</p>
 <div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-k">type</span> <span class="pl-kos">{</span> <span class="pl-v">StandardSchemaV1</span><span class="pl-kos">,</span> <span class="pl-v">StandardJSONSchemaV1</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'@standard-schema/spec'</span><span class="pl-kos">;</span>
 
 <span class="pl-k">type</span> <span class="pl-smi">CombinedSpec</span><span class="pl-c1">&lt;</span><span class="pl-smi">T</span><span class="pl-c1">&gt;</span> <span class="pl-c1">=</span> <span class="pl-smi">StandardSchemaV1</span><span class="pl-c1">&lt;</span><span class="pl-smi">T</span><span class="pl-c1">&gt;</span> <span class="pl-c1">&amp;</span> <span class="pl-smi">StandardJSONSchemaV1</span><span class="pl-c1">&lt;</span><span class="pl-smi">T</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>
@@ -206,257 +550,302 @@ npm i zod          <span class="pl-c"><span class="pl-c">#</span> 4.2+   (or `ar
   <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">result</span><span class="pl-kos">.</span><span class="pl-c1">issues</span><span class="pl-kos">)</span> <span class="pl-k">throw</span> <span class="pl-k">new</span> <span class="pl-v">StandardToolValidationError</span><span class="pl-kos">(</span><span class="pl-s1">target</span><span class="pl-kos">,</span> <span class="pl-s1">result</span><span class="pl-kos">.</span><span class="pl-c1">issues</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
   <span class="pl-k">return</span> <span class="pl-s1">result</span><span class="pl-kos">.</span><span class="pl-c1">value</span><span class="pl-kos">;</span>
 <span class="pl-kos">}</span></pre></div>
-<h2 dir="auto" id="api">API</h2>
-<p dir="auto">The convention is the <strong><code class="notranslate">StandardTool</code></strong> type (normative, no methods); <strong><code class="notranslate">FormattableStandardTool</code></strong> extends it with the formatting layer (see <a href="#the-type">The type</a> and <a href="#formattablestandardtool">FormattableStandardTool</a> above). <code class="notranslate">standardTool()</code> is the reference implementation that builds one.</p>
-<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">standardTool</span><span class="pl-kos">,</span> <span class="pl-k">type</span> <span class="pl-v">StandardTool</span><span class="pl-kos">,</span> <span class="pl-k">type</span> <span class="pl-v">FormattableStandardTool</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'standard-tool'</span><span class="pl-kos">;</span>
-
-<span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-s1">def</span><span class="pl-kos">)</span>: <span class="pl-v">FormattableStandardTool</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>          <span class="pl-c">// reference impl: validates in &amp; out, throws on a violation</span>
-<span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-s1">format</span>?<span class="pl-kos">)</span>: <span class="pl-v">FormattableStandardTool</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span><span class="pl-kos">,</span> <span class="pl-smi">F</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>    <span class="pl-c">// opt into a consumer-specific result (or { error } envelope)</span></pre></div>
-<p dir="auto"><code class="notranslate">Input</code> and <code class="notranslate">Output</code> are your data types: what your <code class="notranslate">execute</code> accepts and returns. The optional schemas describe them. A neutral tool's <code class="notranslate">execute</code> validates both, returns the validated <code class="notranslate">Output</code>, and throws on a violation. <code class="notranslate">execute</code> also takes an optional second <code class="notranslate">meta</code> argument — per-call runtime context forwarded verbatim to your handler, never validated and never in the JSON Schema (see <a href="#per-call-runtime-context-meta">Per-call runtime context</a>).</p>
+<h2 dir="auto" id="the-landscape">The landscape</h2>
+<p dir="auto">The argument in <a href="#why">Why</a> rests on a claim worth backing up: every ecosystem ships its own envelope, while the schema layer underneath is already standardized. Here's the survey.</p>
+<h3 dir="auto" id="the-anatomy-of-a-tool">The anatomy of a tool</h3>
+<p dir="auto">Strip away the branding and every tool definition across every ecosystem is the same six things:</p>
 <markdown-accessiblity-table><table role="table">
 <thead>
 <tr>
-<th>field</th>
-<th>type</th>
-<th>purpose</th>
+<th>Concern</th>
+<th>What it is</th>
+<th>Who consumes it</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code class="notranslate">name</code></td>
-<td><code class="notranslate">string</code></td>
-<td>tool name sent to the model</td>
+<td>name</td>
+<td>stable identifier the model emits</td>
+<td>the model</td>
 </tr>
 <tr>
-<td><code class="notranslate">title?</code></td>
-<td><code class="notranslate">string</code></td>
-<td>optional human-readable label, surfaced by MCP clients in tool-list UIs; ignored by plain function-calling APIs</td>
+<td>description</td>
+<td>natural-language "what/when to use"</td>
+<td>the model</td>
 </tr>
 <tr>
-<td><code class="notranslate">description</code></td>
-<td><code class="notranslate">string</code></td>
-<td>what the tool does</td>
+<td>input schema</td>
+<td>parameter shape, as JSON Schema</td>
+<td>the model (to emit args) and your code (to validate them)</td>
 </tr>
 <tr>
-<td><code class="notranslate">inputSchema?</code></td>
-<td><code class="notranslate">CombinedSpec&lt;Input&gt;</code></td>
-<td>optional input schema; validates and emits JSON Schema</td>
+<td>output schema</td>
+<td>result shape</td>
+<td>your code, some clients (MCP)</td>
 </tr>
 <tr>
-<td><code class="notranslate">outputSchema?</code></td>
-<td><code class="notranslate">CombinedSpec&lt;Output&gt;</code></td>
-<td>optional output schema; validates and emits JSON Schema</td>
+<td>execute</td>
+<td>the function that runs</td>
+<td>your runtime</td>
 </tr>
 <tr>
-<td><code class="notranslate">execute</code> (yours)</td>
-<td><code class="notranslate">(input: Input, meta?: unknown) =&gt; Output | Promise&lt;Output&gt;</code></td>
-<td>your logic; receives validated input and the optional per-call <code class="notranslate">meta</code> (annotate it to type it), returns the output</td>
-</tr>
-<tr>
-<td><code class="notranslate">execute</code> (tool)</td>
-<td><code class="notranslate">(input: Input, meta?: unknown) =&gt; Promise&lt;Output&gt;</code></td>
-<td>validate in, run yours (forwarding <code class="notranslate">meta</code>), validate out; returns the validated <code class="notranslate">Output</code>, throwing a <code class="notranslate">StandardToolValidationError</code> on a violation</td>
+<td>metadata</td>
+<td>title, annotations, hints</td>
+<td>clients/UIs</td>
 </tr>
 </tbody>
 </table></markdown-accessiblity-table>
-<p dir="auto"><code class="notranslate">inputSchema</code> and <code class="notranslate">outputSchema</code> are optional. When present they must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via <code class="notranslate">@valibot/to-json-schema</code>). <code class="notranslate">Input</code> and <code class="notranslate">Output</code> are inferred from them, or from <code class="notranslate">execute</code> when a schema is omitted.</p>
-<p dir="auto"><code class="notranslate">StandardTool</code> — the normative type — stays minimal: <code class="notranslate">{ name, title?, description, inputSchema?, outputSchema?, execute }</code>, no methods, so anything can produce or consume one with a plain object and zero dependencies. The reference <code class="notranslate">standardTool()</code> returns a <code class="notranslate">FormattableStandardTool</code>: that same shape plus two additive members, so a <code class="notranslate">FormattableStandardTool</code> is always a valid <code class="notranslate">StandardTool</code>.</p>
-<markdown-accessiblity-table><table role="table">
-<thead>
-<tr>
-<th>member</th>
-<th>type</th>
-<th>purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code class="notranslate">executeRaw</code></td>
-<td><code class="notranslate">(input: Input, meta?: unknown) =&gt; Output | Promise&lt;Output&gt;</code></td>
-<td>the bare handler — runs your logic with <strong>no</strong> validation or formatting. Hand it to a framework that validates its own way (alongside <code class="notranslate">inputSchema</code>); formatting keeps it intact</td>
-</tr>
-<tr>
-<td><code class="notranslate">formatted</code></td>
-<td><code class="notranslate">(format?) =&gt; FormattableStandardTool&lt;Input, Output, F&gt;</code></td>
-<td>opt into a consumer-specific result; see <a href="#formatting-the-result">Formatting the result</a></td>
-</tr>
-</tbody>
-</table></markdown-accessiblity-table>
-<p dir="auto">The thrown <code class="notranslate">StandardToolValidationError</code> carries <code class="notranslate">target: 'input' \| 'output'</code> and the Standard Schema <code class="notranslate">issues</code>, so a formatter (or a <code class="notranslate">catch</code>) can build a rich result.</p>
-<h2 dir="auto" id="usage">Usage</h2>
-<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">standardTool</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'standard-tool'</span><span class="pl-kos">;</span>
+<p dir="auto">Two of these — the input schema and the output schema — carry all the real complexity, because they serve two masters at once. They have to emit JSON Schema (so a model can be told how to call the tool) and validate runtime data (because the arguments a model emits are untrusted input). Everything else is a string or a function. The industry reinvents the trivial parts (the envelope) over and over, while the hard part (the dual schema role) was solved once by the Standard Schema family.</p>
+<h3 dir="auto" id="provider-wire-formats">Provider wire formats</h3>
+<p dir="auto">These are the formats you serialize a tool into when you call a model. They have largely converged on "JSON Schema for the parameters," but they disagree on the wrapper and on the JSON Schema dialect.</p>
+<p dir="auto">OpenAI's Chat Completions format:</p>
+<div class="highlight highlight-source-json-comments" dir="auto"><pre class="notranslate">{
+  <span class="pl-ent">"type"</span>: <span class="pl-s"><span class="pl-pds">"</span>function<span class="pl-pds">"</span></span>,
+  <span class="pl-ent">"function"</span>: {
+    <span class="pl-ent">"name"</span>: <span class="pl-s"><span class="pl-pds">"</span>get_weather<span class="pl-pds">"</span></span>,
+    <span class="pl-ent">"description"</span>: <span class="pl-s"><span class="pl-pds">"</span>Current temperature for a city<span class="pl-pds">"</span></span>,
+    <span class="pl-ent">"parameters"</span>: { <span class="pl-ent">"type"</span>: <span class="pl-s"><span class="pl-pds">"</span>object<span class="pl-pds">"</span></span>, <span class="pl-ent">"properties"</span>: { <span class="pl-ent">"city"</span>: { <span class="pl-ent">"type"</span>: <span class="pl-s"><span class="pl-pds">"</span>string<span class="pl-pds">"</span></span> } }, <span class="pl-ent">"required"</span>: [<span class="pl-s"><span class="pl-pds">"</span>city<span class="pl-pds">"</span></span>], <span class="pl-ent">"additionalProperties"</span>: <span class="pl-c1">false</span> },
+    <span class="pl-ent">"strict"</span>: <span class="pl-c1">true</span>
+  }
+}</pre></div>
+<p dir="auto">OpenAI's Responses API is flatter and drops the <code class="notranslate">function</code> wrapper:</p>
+<div class="highlight highlight-source-json-comments" dir="auto"><pre class="notranslate">{ <span class="pl-ent">"type"</span>: <span class="pl-s"><span class="pl-pds">"</span>function<span class="pl-pds">"</span></span>, <span class="pl-ent">"name"</span>: <span class="pl-s"><span class="pl-pds">"</span>get_weather<span class="pl-pds">"</span></span>, <span class="pl-ent">"description"</span>: <span class="pl-s"><span class="pl-pds">"</span>…<span class="pl-pds">"</span></span>, <span class="pl-ent">"parameters"</span>: { <span class="pl-c"><span class="pl-c">/*</span> JSON Schema <span class="pl-c">*/</span></span> }, <span class="pl-ent">"strict"</span>: <span class="pl-c1">true</span> }</pre></div>
+<p dir="auto"><code class="notranslate">strict: true</code> is built on Structured Outputs and imposes extra rules on the JSON Schema: every object needs <code class="notranslate">additionalProperties: false</code>, and every property must be listed in <code class="notranslate">required</code> (optionals are expressed as <code class="notranslate">"type": ["string", "null"]</code>). So the same logical schema must be emitted differently depending on whether strict mode is on. (<a href="https://developers.openai.com/api/docs/guides/function-calling" rel="nofollow">function calling guide</a>, <a href="https://openai.com/index/introducing-structured-outputs-in-the-api/" rel="nofollow">structured outputs</a>)</p>
+<p dir="auto">Anthropic's Messages API uses an <code class="notranslate">input_schema</code> key instead of <code class="notranslate">parameters</code>:</p>
+<div class="highlight highlight-source-json-comments" dir="auto"><pre class="notranslate">{ <span class="pl-ent">"name"</span>: <span class="pl-s"><span class="pl-pds">"</span>get_weather<span class="pl-pds">"</span></span>, <span class="pl-ent">"description"</span>: <span class="pl-s"><span class="pl-pds">"</span>…<span class="pl-pds">"</span></span>, <span class="pl-ent">"input_schema"</span>: { <span class="pl-ent">"type"</span>: <span class="pl-s"><span class="pl-pds">"</span>object<span class="pl-pds">"</span></span>, <span class="pl-ent">"properties"</span>: { <span class="pl-ent">"city"</span>: { <span class="pl-ent">"type"</span>: <span class="pl-s"><span class="pl-pds">"</span>string<span class="pl-pds">"</span></span> } }, <span class="pl-ent">"required"</span>: [<span class="pl-s"><span class="pl-pds">"</span>city<span class="pl-pds">"</span></span>] } }</pre></div>
+<p dir="auto">Google Gemini's <code class="notranslate">functionDeclarations</code> wrap the same idea but accept only an OpenAPI 3.0 subset, not full JSON Schema:</p>
+<div class="highlight highlight-source-json-comments" dir="auto"><pre class="notranslate">{ <span class="pl-ent">"functionDeclarations"</span>: [ { <span class="pl-ent">"name"</span>: <span class="pl-s"><span class="pl-pds">"</span>get_weather<span class="pl-pds">"</span></span>, <span class="pl-ent">"description"</span>: <span class="pl-s"><span class="pl-pds">"</span>…<span class="pl-pds">"</span></span>, <span class="pl-ent">"parameters"</span>: { <span class="pl-ent">"type"</span>: <span class="pl-s"><span class="pl-pds">"</span>object<span class="pl-pds">"</span></span>, <span class="pl-ent">"properties"</span>: { <span class="pl-ent">"city"</span>: { <span class="pl-ent">"type"</span>: <span class="pl-s"><span class="pl-pds">"</span>string<span class="pl-pds">"</span></span> } }, <span class="pl-ent">"required"</span>: [<span class="pl-s"><span class="pl-pds">"</span>city<span class="pl-pds">"</span></span>] } } ] }</pre></div>
+<p dir="auto">Supported keywords are limited (<code class="notranslate">type</code>, <code class="notranslate">properties</code>, <code class="notranslate">items</code>, <code class="notranslate">enum</code>, <code class="notranslate">required</code>, and a few more); <code class="notranslate">default</code>, <code class="notranslate">oneOf</code>, and others are not supported. (<a href="https://ai.google.dev/gemini-api/docs/function-calling" rel="nofollow">Gemini function calling</a>)</p>
+<p dir="auto">The Model Context Protocol (MCP), introduced by Anthropic, is the closest thing to a cross-vendor standard for tools. Its <code class="notranslate">Tool</code> is:</p>
+<div class="highlight highlight-source-json-comments" dir="auto"><pre class="notranslate">{
+  <span class="pl-ent">"name"</span>: <span class="pl-s"><span class="pl-pds">"</span>get_weather<span class="pl-pds">"</span></span>,
+  <span class="pl-ent">"title"</span>: <span class="pl-s"><span class="pl-pds">"</span>Weather Information Provider<span class="pl-pds">"</span></span>,
+  <span class="pl-ent">"description"</span>: <span class="pl-s"><span class="pl-pds">"</span>…<span class="pl-pds">"</span></span>,
+  <span class="pl-ent">"inputSchema"</span>:  { <span class="pl-ent">"type"</span>: <span class="pl-s"><span class="pl-pds">"</span>object<span class="pl-pds">"</span></span>, <span class="pl-ent">"properties"</span>: { <span class="pl-c"><span class="pl-c">/*</span> … <span class="pl-c">*/</span></span> }, <span class="pl-ent">"required"</span>: [<span class="pl-s"><span class="pl-pds">"</span>city<span class="pl-pds">"</span></span>] },
+  <span class="pl-ent">"outputSchema"</span>: { <span class="pl-ent">"type"</span>: <span class="pl-s"><span class="pl-pds">"</span>object<span class="pl-pds">"</span></span>, <span class="pl-ent">"properties"</span>: { <span class="pl-c"><span class="pl-c">/*</span> … <span class="pl-c">*/</span></span> } },
+  <span class="pl-ent">"annotations"</span>:  { <span class="pl-c"><span class="pl-c">/*</span> behavior hints <span class="pl-c">*/</span></span> }
+}</pre></div>
+<p dir="auto">MCP also defines structured results (<code class="notranslate">structuredContent</code>) and says that when an <code class="notranslate">outputSchema</code> is present, "servers MUST provide structured results that conform to this schema" and "clients SHOULD validate" them. (<a href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools" rel="nofollow">MCP tools spec, 2025-06-18</a>)</p>
+<p dir="auto">The OpenAI-compatible crowd (Mistral, Groq, Together, Fireworks, and many local servers via LM Studio or Ollama) reuses the OpenAI <code class="notranslate">tools</code> shape, which is why it has become a de-facto baseline. But "compatible" still varies in JSON Schema support and strict-mode behavior.</p>
+<blockquote>
+<p dir="auto">Takeaway: the parameters are JSON Schema almost everywhere, but the wrapper key (<code class="notranslate">parameters</code> vs <code class="notranslate">input_schema</code> vs <code class="notranslate">inputSchema</code> vs <code class="notranslate">functionDeclarations</code>), the dialect (full draft-2020-12 vs OpenAPI-3.0 subset vs strict-mode-constrained), and the result shape all differ.</p>
+</blockquote>
+<h3 dir="auto" id="framework-and-sdk-tool-objects">Framework and SDK tool objects</h3>
+<p dir="auto">These wrap the wire format and the execution. This is where fragmentation is worst, because each one invents its own object and binds it to its own runtime.</p>
+<p dir="auto">The Vercel AI SDK uses <code class="notranslate">tool()</code> from the <code class="notranslate">ai</code> package:</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">tool</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'ai'</span><span class="pl-kos">;</span>
 <span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">z</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'zod'</span><span class="pl-kos">;</span>
 
-<span class="pl-k">const</span> <span class="pl-s1">getWeather</span> <span class="pl-c1">=</span> <span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
-  <span class="pl-c1">name</span>: <span class="pl-s">'get_weather'</span><span class="pl-kos">,</span>
+<span class="pl-k">const</span> <span class="pl-s1">getWeather</span> <span class="pl-c1">=</span> <span class="pl-en">tool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
   <span class="pl-c1">description</span>: <span class="pl-s">'Current temperature for a city'</span><span class="pl-kos">,</span>
-  <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-  <span class="pl-c1">outputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">number</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+  <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>         <span class="pl-c">// Zod or jsonSchema()</span>
   <span class="pl-en">execute</span>: <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> city <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-c1">21</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-
-<span class="pl-c">// validated end to end; returns the raw Output and throws on bad input or output:</span>
-<span class="pl-k">const</span> <span class="pl-s1">out</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// { tempC: number }</span>
-
-<span class="pl-c">// want failures as data instead of throws? format it (see below):</span>
-<span class="pl-k">const</span> <span class="pl-s1">safe</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// { tempC: number } | { error: string }</span>
-
-<span class="pl-c">// JSON Schema for the model (Standard JSON Schema), synchronous (inputSchema is optional, hence `!`):</span>
-<span class="pl-k">const</span> <span class="pl-s1">parameters</span> <span class="pl-c1">=</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-c1">!</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
-<h2 dir="auto" id="per-call-runtime-context-meta">Per-call runtime context (<code class="notranslate">meta</code>)</h2>
-<p dir="auto">Tools often need per-call data that should not appear in the model-facing <code class="notranslate">inputSchema</code>, such as a locale, an auth token, or a request-scoped DB handle. <code class="notranslate">execute</code> takes an optional second <code class="notranslate">meta</code> argument, forwarded verbatim to your handler. It's never validated and never part of the JSON Schema, so your tools can stay static (defined once at module scope) while you inject context at call time, instead of closing over it in a per-render factory.</p>
-<p dir="auto"><code class="notranslate">meta</code> is typed <code class="notranslate">unknown</code>. Annotate it on your handler to type it at the call site:</p>
-<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">const</span> <span class="pl-s1">greet</span> <span class="pl-c1">=</span> <span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
-  <span class="pl-c1">name</span>: <span class="pl-s">'greet'</span><span class="pl-kos">,</span>
-  <span class="pl-c1">description</span>: <span class="pl-s">'Greet a person in the caller-supplied locale'</span><span class="pl-kos">,</span>
-  <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">name</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-  <span class="pl-en">execute</span>: <span class="pl-kos">(</span><span class="pl-kos">{</span> name <span class="pl-kos">}</span><span class="pl-kos">,</span> <span class="pl-s1">meta</span>: <span class="pl-kos">{</span> <span class="pl-c1">locale</span>: <span class="pl-smi">string</span> <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-s1">meta</span><span class="pl-kos">.</span><span class="pl-c1">locale</span> <span class="pl-c1">===</span> <span class="pl-s">'fr'</span> ? <span class="pl-s">`bonjour <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">name</span><span class="pl-kos">}</span></span>`</span> : <span class="pl-s">`hi <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">name</span><span class="pl-kos">}</span></span>`</span><span class="pl-kos">)</span><span class="pl-kos">,</span> <span class="pl-c">// annotate meta here</span>
-<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-
-<span class="pl-k">await</span> <span class="pl-s1">greet</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">name</span>: <span class="pl-s">'Ada'</span> <span class="pl-kos">}</span><span class="pl-kos">,</span> <span class="pl-kos">{</span> <span class="pl-c1">locale</span>: <span class="pl-s">'fr'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → 'bonjour Ada'</span></pre></div>
-<p dir="auto">Tools that don't need it just call <code class="notranslate">execute(input)</code>; <code class="notranslate">meta</code> is optional.</p>
-<h2 dir="auto" id="formatting-the-result">Formatting the result</h2>
-<p dir="auto">A neutral tool throws on a validation failure or a thrown error, and returns its own <code class="notranslate">Output</code> otherwise. That's the right default for typed code, but a model loop usually wants a failure to come back as <em>data</em> it can self-correct from, and some consumers (MCP) want a specific result envelope. Formatting is how you opt into that, without changing the tool's <code class="notranslate">Input</code> or <code class="notranslate">Output</code>:</p>
-<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">const</span> <span class="pl-s1">getWeather</span> <span class="pl-c1">=</span> <span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
-  <span class="pl-c1">name</span>: <span class="pl-s">'get_weather'</span><span class="pl-kos">,</span>
-  <span class="pl-c1">description</span>: <span class="pl-s">'Current temperature for a city'</span><span class="pl-kos">,</span>
-  <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-  <span class="pl-c1">outputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">number</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-  <span class="pl-en">execute</span>: <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> city <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-c1">21</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-
-<span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-c1">123</span> <span class="pl-kos">}</span> <span class="pl-k">as</span> <span class="pl-smi">never</span><span class="pl-kos">)</span><span class="pl-kos">;</span>             <span class="pl-c">// throws StandardToolValidationError</span>
-<span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-c1">123</span> <span class="pl-kos">}</span> <span class="pl-k">as</span> <span class="pl-smi">never</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → { error: 'input validation failed: …' }</span></pre></div>
-<p dir="auto"><code class="notranslate">formatted</code> takes any <code class="notranslate">(result: Output | Error) =&gt; FormattedOutput</code>. On success it receives the validated <code class="notranslate">Output</code>; on failure an <code class="notranslate">Error</code> (a <code class="notranslate">StandardToolValidationError</code> for validation failures, carrying <code class="notranslate">target</code> and the Standard Schema <code class="notranslate">issues</code>). With no formatter, the default <code class="notranslate">{ error }</code> envelope is used. The formatter's return type becomes the tool's third generic, <code class="notranslate">FormattedOutput</code>:</p>
-<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-c">// reshape to anything</span>
-<span class="pl-k">const</span> <span class="pl-s1">asText</span> <span class="pl-c1">=</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">r</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-s1">r</span> <span class="pl-k">instanceof</span> <span class="pl-v">Error</span> ? <span class="pl-s">`error: <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">r</span><span class="pl-kos">.</span><span class="pl-c1">message</span><span class="pl-kos">}</span></span>`</span> : <span class="pl-s">`<span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">r</span><span class="pl-kos">.</span><span class="pl-c1">tempC</span><span class="pl-kos">}</span></span>°C`</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-<span class="pl-k">await</span> <span class="pl-s1">asText</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → '21°C'</span>
-
-<span class="pl-c">// re-throw to keep throwing on failure (the escape hatch back to neutral behavior)</span>
-<span class="pl-k">const</span> <span class="pl-s1">strict</span> <span class="pl-c1">=</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">r</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">{</span>
-  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">r</span> <span class="pl-k">instanceof</span> <span class="pl-v">Error</span><span class="pl-kos">)</span> <span class="pl-k">throw</span> <span class="pl-s1">r</span><span class="pl-kos">;</span>
-  <span class="pl-k">return</span> <span class="pl-s1">r</span><span class="pl-kos">;</span>
+  <span class="pl-c">// outputSchema?, toModelOutput?</span>
 <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
-<p dir="auto">Formatting swaps only that third generic; <code class="notranslate">Input</code> and <code class="notranslate">Output</code> are untouched, and the bare handler is carried along as <code class="notranslate">executeRaw</code>. So a formatted tool stays re-formattable, and the unvalidated handler stays reachable:</p>
-<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">const</span> <span class="pl-s1">enveloped</span> <span class="pl-c1">=</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>                     <span class="pl-c">// { error } envelope</span>
-<span class="pl-k">await</span> <span class="pl-s1">enveloped</span><span class="pl-kos">.</span><span class="pl-en">executeRaw</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>             <span class="pl-c">// → { tempC: 21 } (the bare handler; no validation)</span>
-<span class="pl-k">await</span> <span class="pl-s1">enveloped</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-s1">asText</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// → '21°C', re-derived from the validated Output</span></pre></div>
-<p dir="auto">Re-formatting <em>replaces</em>, it doesn't compose: each <code class="notranslate">formatted()</code> re-derives from the validated <code class="notranslate">execute</code>, never from the previous formatting. That's what lets a framework ship a tool pre-formatted for itself while you stay free to re-target it for another consumer — or run the bare <code class="notranslate">executeRaw</code>.</p>
-<h2 dir="auto" id="mcp-compatible-output">MCP-compatible output</h2>
-<p dir="auto"><a href="https://modelcontextprotocol.io" rel="nofollow">MCP</a> tools return a structured result envelope, <code class="notranslate">{ content, structuredContent?, isError? }</code>, not just raw data. A formatter applied with <code class="notranslate">.formatted()</code> maps <code class="notranslate">execute</code>'s result onto that shape, so a StandardTool is consumable by an MCP server with no translation. The formatter below is text-only: an object result is JSON-encoded into a text block and also mirrored into <code class="notranslate">structuredContent</code> (per MCP's <a href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content" rel="nofollow">backwards-compatibility guidance</a>), errors come back with <code class="notranslate">isError: true</code> (a self-correctable tool error), and image, audio, and resource blocks are out of scope.</p>
-<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">type</span> <span class="pl-smi">McpToolResult</span> <span class="pl-c1">=</span> <span class="pl-kos">{</span>
-  <span class="pl-c1">content</span>: <span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'text'</span><span class="pl-kos">;</span> <span class="pl-c1">text</span>: <span class="pl-smi">string</span> <span class="pl-kos">}</span><span class="pl-kos">[</span><span class="pl-kos">]</span><span class="pl-kos">;</span>
-  <span class="pl-c1">structuredContent</span>?: <span class="pl-smi">Record</span><span class="pl-c1">&lt;</span><span class="pl-smi">string</span><span class="pl-kos">,</span> <span class="pl-smi">unknown</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>
-  <span class="pl-c1">isError</span>?: <span class="pl-smi">boolean</span><span class="pl-kos">;</span>
-<span class="pl-kos">}</span><span class="pl-kos">;</span>
-
-<span class="pl-c">// A plain function; pass it to .formatted() (which infers FormattedOutput from the return type).</span>
-<span class="pl-c">// `result` is your Output, or an Error (validation/exec failure).</span>
-<span class="pl-k">const</span> <span class="pl-en">toMcpResult</span> <span class="pl-c1">=</span> <span class="pl-kos">(</span><span class="pl-s1">result</span>: <span class="pl-smi">unknown</span><span class="pl-kos">)</span>: <span class="pl-smi">McpToolResult</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">{</span>
-  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">result</span> <span class="pl-k">instanceof</span> <span class="pl-v">Error</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
-    <span class="pl-k">return</span> <span class="pl-kos">{</span> <span class="pl-c1">content</span>: <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'text'</span><span class="pl-kos">,</span> <span class="pl-c1">text</span>: <span class="pl-s1">result</span><span class="pl-kos">.</span><span class="pl-c1">message</span> <span class="pl-kos">}</span><span class="pl-kos">]</span><span class="pl-kos">,</span> <span class="pl-c1">isError</span>: <span class="pl-c1">true</span> <span class="pl-kos">}</span><span class="pl-kos">;</span> <span class="pl-c">// tool error the model can self-correct</span>
-  <span class="pl-kos">}</span>
-  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-k">typeof</span> <span class="pl-s1">result</span> <span class="pl-c1">===</span> <span class="pl-s">'string'</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
-    <span class="pl-k">return</span> <span class="pl-kos">{</span> <span class="pl-c1">content</span>: <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'text'</span><span class="pl-kos">,</span> <span class="pl-c1">text</span>: <span class="pl-s1">result</span> <span class="pl-kos">}</span><span class="pl-kos">]</span> <span class="pl-kos">}</span><span class="pl-kos">;</span>
-  <span class="pl-kos">}</span>
-  <span class="pl-k">const</span> <span class="pl-s1">text</span> <span class="pl-c1">=</span> <span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">stringify</span><span class="pl-kos">(</span><span class="pl-s1">result</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">result</span> <span class="pl-c1">!==</span> <span class="pl-c1">null</span> <span class="pl-c1">&amp;&amp;</span> <span class="pl-k">typeof</span> <span class="pl-s1">result</span> <span class="pl-c1">===</span> <span class="pl-s">'object'</span> <span class="pl-c1">&amp;&amp;</span> <span class="pl-c1">!</span><span class="pl-v">Array</span><span class="pl-kos">.</span><span class="pl-en">isArray</span><span class="pl-kos">(</span><span class="pl-s1">result</span><span class="pl-kos">)</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
-    <span class="pl-k">return</span> <span class="pl-kos">{</span> <span class="pl-c1">content</span>: <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'text'</span><span class="pl-kos">,</span> text <span class="pl-kos">}</span><span class="pl-kos">]</span><span class="pl-kos">,</span> <span class="pl-c1">structuredContent</span>: <span class="pl-s1">result</span> <span class="pl-k">as</span> <span class="pl-smi">Record</span><span class="pl-c1">&lt;</span><span class="pl-smi">string</span><span class="pl-kos">,</span> <span class="pl-smi">unknown</span><span class="pl-c1">&gt;</span> <span class="pl-kos">}</span><span class="pl-kos">;</span>
-  <span class="pl-kos">}</span>
-  <span class="pl-k">return</span> <span class="pl-kos">{</span> <span class="pl-c1">content</span>: <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'text'</span><span class="pl-kos">,</span> text <span class="pl-kos">}</span><span class="pl-kos">]</span> <span class="pl-kos">}</span><span class="pl-kos">;</span>
-<span class="pl-kos">}</span><span class="pl-kos">;</span></pre></div>
-<p dir="auto">Apply it with <code class="notranslate">.formatted()</code>, and <code class="notranslate">execute</code> returns a value shaped exactly like an MCP <code class="notranslate">CallToolResult</code>:</p>
-<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">const</span> <span class="pl-s1">getWeather</span> <span class="pl-c1">=</span> <span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
-  <span class="pl-c1">name</span>: <span class="pl-s">'get_weather'</span><span class="pl-kos">,</span>
-  <span class="pl-c1">title</span>: <span class="pl-s">'Get weather'</span><span class="pl-kos">,</span>
-  <span class="pl-c1">description</span>: <span class="pl-s">'Current temperature for a city'</span><span class="pl-kos">,</span>
+<p dir="auto">The <code class="notranslate">tool()</code> helper exists so TypeScript can connect <code class="notranslate">inputSchema</code> to <code class="notranslate">execute</code>'s argument types. Tools are keyed by name in a record passed to <code class="notranslate">generateText</code>/<code class="notranslate">streamText</code>, and the value is coupled to the SDK's own <code class="notranslate">Tool</code>/<code class="notranslate">ToolSet</code> types. (<a href="https://ai-sdk.dev/docs/reference/ai-sdk-core/tool" rel="nofollow">AI SDK <code class="notranslate">tool</code> reference</a>)</p>
+<p dir="auto">The MCP TypeScript SDK uses <code class="notranslate">registerTool</code>:</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-s1">server</span><span class="pl-kos">.</span><span class="pl-en">registerTool</span><span class="pl-kos">(</span>
+  <span class="pl-s">'get_weather'</span><span class="pl-kos">,</span>
+  <span class="pl-kos">{</span> <span class="pl-c1">title</span>: <span class="pl-s">'Weather'</span><span class="pl-kos">,</span> <span class="pl-c1">description</span>: <span class="pl-s">'…'</span><span class="pl-kos">,</span> <span class="pl-c1">inputSchema</span>: <span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span> <span class="pl-kos">}</span><span class="pl-kos">,</span>  <span class="pl-c">// raw Zod shape</span>
+  <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> city <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">content</span>: <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'text'</span><span class="pl-kos">,</span> <span class="pl-c1">text</span>: <span class="pl-s">'…'</span> <span class="pl-kos">}</span><span class="pl-kos">]</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+<span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<p dir="auto">Mastra's <code class="notranslate">createTool</code> already leans on the Standard family:</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-en">createTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
+  <span class="pl-c1">id</span>: <span class="pl-s">'get-weather'</span><span class="pl-kos">,</span>
+  <span class="pl-c1">description</span>: <span class="pl-s">'…'</span><span class="pl-kos">,</span>
   <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
   <span class="pl-c1">outputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">number</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-  <span class="pl-en">execute</span>: <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> city <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-c1">21</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-s1">toMcpResult</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-
-<span class="pl-k">await</span> <span class="pl-s1">getWeather</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s">'Paris'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-<span class="pl-c">// → { content: [{ type: 'text', text: '{"tempC":21}' }<span class="pl-smi">], structuredContent: { tempC: 21 } </span>}</span>
-<span class="pl-c">//</span>
-<span class="pl-c">// bad input, a thrown error, or invalid output instead →</span>
-<span class="pl-c">// → { content: [{ type: 'text', text: 'input validation failed: ...' }], isError: true }</span></pre></div>
-<p dir="auto">That's the exact shape an MCP server returns from a <code class="notranslate">tools/call</code> handler, so a StandardTool drops straight in. Wiring it into a specific MCP SDK is out of scope here.</p>
-<h2 dir="auto" id="with-the-openai-api">With the OpenAI API</h2>
-<p dir="auto">Uses the <a href="https://developers.openai.com/api/docs/guides/function-calling" rel="nofollow">Responses API</a>. Because every tool is the same neutral shape, you keep them in one array, <code class="notranslate">.map</code> it into the request's <code class="notranslate">tools</code>, then dispatch each function call back to the matching tool by <code class="notranslate">name</code>. Adding a fourth tool is one more array entry, with no special-casing and no per-tool wiring. And by formatting each call with the default <code class="notranslate">{ error }</code> envelope (<code class="notranslate">tool.formatted()</code>), an argument that fails the tool's schema comes back as data for the model to fix rather than throwing — <code class="notranslate">JSON.parse</code> runs first, so guard it if the model might emit invalid JSON.</p>
-<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">import</span> <span class="pl-v">OpenAI</span> <span class="pl-k">from</span> <span class="pl-s">'openai'</span><span class="pl-kos">;</span>
-<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">z</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'zod'</span><span class="pl-kos">;</span>
-<span class="pl-k">import</span> <span class="pl-kos">{</span> <span class="pl-s1">standardTool</span><span class="pl-kos">,</span> <span class="pl-k">type</span> <span class="pl-v">FormattableStandardTool</span> <span class="pl-kos">}</span> <span class="pl-k">from</span> <span class="pl-s">'standard-tool'</span><span class="pl-kos">;</span>
-
-<span class="pl-k">const</span> <span class="pl-s1">client</span> <span class="pl-c1">=</span> <span class="pl-k">new</span> <span class="pl-v">OpenAI</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-
-<span class="pl-k">const</span> <span class="pl-s1">tools</span>: <span class="pl-smi">FormattableStandardTool</span><span class="pl-kos">[</span><span class="pl-kos">]</span> <span class="pl-c1">=</span> <span class="pl-kos">[</span>
-  <span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
-    <span class="pl-c1">name</span>: <span class="pl-s">'get_weather'</span><span class="pl-kos">,</span>
-    <span class="pl-c1">description</span>: <span class="pl-s">'Get the current temperature for a city'</span><span class="pl-kos">,</span>
-    <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">city</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-    <span class="pl-c1">outputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">number</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-    <span class="pl-en">execute</span>: <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> city <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-c1">21</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-  <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-  <span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
-    <span class="pl-c1">name</span>: <span class="pl-s">'get_time'</span><span class="pl-kos">,</span>
-    <span class="pl-c1">description</span>: <span class="pl-s">'Get the current time in an IANA timezone'</span><span class="pl-kos">,</span>
-    <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">timezone</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-    <span class="pl-c1">outputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">iso</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-    <span class="pl-en">execute</span>: <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> timezone <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">iso</span>: <span class="pl-k">new</span> <span class="pl-v">Date</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">toLocaleString</span><span class="pl-kos">(</span><span class="pl-s">'en-US'</span><span class="pl-kos">,</span> <span class="pl-kos">{</span> <span class="pl-c1">timeZone</span>: <span class="pl-s1">timezone</span> <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-  <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-  <span class="pl-en">standardTool</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
-    <span class="pl-c1">name</span>: <span class="pl-s">'convert_currency'</span><span class="pl-kos">,</span>
-    <span class="pl-c1">description</span>: <span class="pl-s">'Convert an amount between two currencies'</span><span class="pl-kos">,</span>
-    <span class="pl-c1">inputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">amount</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">number</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">,</span> <span class="pl-c1">from</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">,</span> <span class="pl-c1">to</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">string</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-    <span class="pl-c1">outputSchema</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">object</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">amount</span>: <span class="pl-s1">z</span><span class="pl-kos">.</span><span class="pl-en">number</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-    <span class="pl-en">execute</span>: <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> amount <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">amount</span>: <span class="pl-v">Math</span><span class="pl-kos">.</span><span class="pl-en">round</span><span class="pl-kos">(</span><span class="pl-s1">amount</span> <span class="pl-c1">*</span> <span class="pl-c1">1.08</span> <span class="pl-c1">*</span> <span class="pl-c1">100</span><span class="pl-kos">)</span> <span class="pl-c1">/</span> <span class="pl-c1">100</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-  <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-<span class="pl-kos">]</span><span class="pl-kos">;</span>
-
-<span class="pl-k">const</span> <span class="pl-s1">input</span>: <span class="pl-v">OpenAI</span><span class="pl-kos">.</span><span class="pl-c1">Responses</span><span class="pl-kos">.</span><span class="pl-smi">ResponseInput</span> <span class="pl-c1">=</span> <span class="pl-kos">[</span><span class="pl-kos">{</span> <span class="pl-c1">role</span>: <span class="pl-s">'user'</span><span class="pl-kos">,</span> <span class="pl-c1">content</span>: <span class="pl-s">'What is the weather in Paris?'</span> <span class="pl-kos">}</span><span class="pl-kos">]</span><span class="pl-kos">;</span>
-
-<span class="pl-k">const</span> <span class="pl-s1">res</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">responses</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span>
-  <span class="pl-c1">model</span>: <span class="pl-s">'gpt-5.5'</span><span class="pl-kos">,</span>
-  input<span class="pl-kos">,</span>
-  <span class="pl-c">// ← the payoff: one shape, one mapping for every tool</span>
-  <span class="pl-c1">tools</span>: <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">map</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">tool</span><span class="pl-kos">)</span>: <span class="pl-v">OpenAI</span><span class="pl-kos">.</span><span class="pl-c1">Responses</span><span class="pl-kos">.</span><span class="pl-smi">Tool</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span>
-    <span class="pl-c1">type</span>: <span class="pl-s">'function'</span><span class="pl-kos">,</span>
-    <span class="pl-c1">name</span>: <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">,</span>
-    <span class="pl-c1">description</span>: <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">description</span><span class="pl-kos">,</span>
-    <span class="pl-c1">parameters</span>: <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span> ? <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-c1">inputSchema</span><span class="pl-kos">[</span><span class="pl-s">'~standard'</span><span class="pl-kos">]</span><span class="pl-kos">.</span><span class="pl-c1">jsonSchema</span><span class="pl-kos">.</span><span class="pl-en">input</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-s">'draft-2020-12'</span> <span class="pl-kos">}</span><span class="pl-kos">)</span> : <span class="pl-kos">{</span><span class="pl-kos">}</span><span class="pl-kos">,</span>
-    <span class="pl-c1">strict</span>: <span class="pl-c1">false</span><span class="pl-kos">,</span>
-  <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
-<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-
-<span class="pl-s1">input</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span>...<span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">output</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-
-<span class="pl-k">for</span> <span class="pl-kos">(</span><span class="pl-k">const</span> <span class="pl-s1">item</span> <span class="pl-k">of</span> <span class="pl-s1">res</span><span class="pl-kos">.</span><span class="pl-c1">output</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
-  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">item</span><span class="pl-kos">.</span><span class="pl-c1">type</span> <span class="pl-c1">!==</span> <span class="pl-s">'function_call'</span><span class="pl-kos">)</span> <span class="pl-k">continue</span><span class="pl-kos">;</span>
-  <span class="pl-k">const</span> <span class="pl-s1">tool</span> <span class="pl-c1">=</span> <span class="pl-s1">tools</span><span class="pl-kos">.</span><span class="pl-en">find</span><span class="pl-kos">(</span><span class="pl-kos">(</span><span class="pl-s1">t</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-s1">t</span><span class="pl-kos">.</span><span class="pl-c1">name</span> <span class="pl-c1">===</span> <span class="pl-s1">item</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-  <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-c1">!</span><span class="pl-s1">tool</span><span class="pl-kos">)</span> <span class="pl-k">continue</span><span class="pl-kos">;</span>
-  <span class="pl-k">const</span> <span class="pl-s1">result</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">tool</span><span class="pl-kos">.</span><span class="pl-en">formatted</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">execute</span><span class="pl-kos">(</span><span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">parse</span><span class="pl-kos">(</span><span class="pl-s1">item</span><span class="pl-kos">.</span><span class="pl-c1">arguments</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// schema-invalid args → { error }, so the model self-corrects</span>
-  <span class="pl-s1">input</span><span class="pl-kos">.</span><span class="pl-en">push</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">type</span>: <span class="pl-s">'function_call_output'</span><span class="pl-kos">,</span> <span class="pl-c1">call_id</span>: <span class="pl-s1">item</span><span class="pl-kos">.</span><span class="pl-c1">call_id</span><span class="pl-kos">,</span> <span class="pl-c1">output</span>: <span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">stringify</span><span class="pl-kos">(</span><span class="pl-s1">result</span><span class="pl-kos">)</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-<span class="pl-kos">}</span>
-
-<span class="pl-k">const</span> <span class="pl-s1">final</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-s1">client</span><span class="pl-kos">.</span><span class="pl-c1">responses</span><span class="pl-kos">.</span><span class="pl-en">create</span><span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">model</span>: <span class="pl-s">'gpt-5.5'</span><span class="pl-kos">,</span> input <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
-<span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s1">final</span><span class="pl-kos">.</span><span class="pl-c1">output_text</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
-<h2 dir="auto" id="links">Links</h2>
+  <span class="pl-en">execute</span>: <span class="pl-k">async</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> context <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">(</span><span class="pl-kos">{</span> <span class="pl-c1">tempC</span>: <span class="pl-c1">21</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">,</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<p dir="auto">Mastra's docs state that input and output schemas "can be defined using any library that supports Standard JSON Schema, including Zod, Valibot, and ArkType." (<a href="https://mastra.ai/reference/tools/create-tool" rel="nofollow">Mastra <code class="notranslate">createTool</code></a>) So one major framework already builds its tool schemas on the same foundation as this proposal. The tool object, though, stays bound to <code class="notranslate">@mastra/core</code> (see below).</p>
+<p dir="auto">The rest follow the same pattern. Genkit exposes <code class="notranslate">ai.defineTool({ name, description, inputSchema, outputSchema }, fn)</code>. LangChain has <code class="notranslate">tool(fn, { name, description, schema })</code>, or it infers the schema from the function signature. LlamaIndex has <code class="notranslate">FunctionTool.from_defaults(fn, name, description, fn_schema)</code>. Pydantic AI, smolagents, the OpenAI Agents SDK, Semantic Kernel, CrewAI, and AutoGen each have their own decorator or class. oRPC and Effect expose tool and <code class="notranslate">AiTool</code> builders.</p>
+<p dir="auto">A compact cross-section:</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>Ecosystem</th>
+<th>name</th>
+<th>desc</th>
+<th>params key</th>
+<th>output schema</th>
+<th>execute</th>
+<th>title/meta</th>
+<th>schema source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OpenAI (Responses)</td>
+<td>✅</td>
+<td>✅</td>
+<td><code class="notranslate">parameters</code></td>
+<td>n/a</td>
+<td>(you wire it)</td>
+<td>n/a</td>
+<td>JSON Schema (+ strict)</td>
+</tr>
+<tr>
+<td>Anthropic (Messages API)</td>
+<td>✅</td>
+<td>✅</td>
+<td><code class="notranslate">input_schema</code></td>
+<td>n/a</td>
+<td>(you wire it)</td>
+<td>n/a</td>
+<td>JSON Schema</td>
+</tr>
+<tr>
+<td>Gemini</td>
+<td>✅</td>
+<td>✅</td>
+<td><code class="notranslate">parameters</code></td>
+<td>n/a</td>
+<td>(you wire it)</td>
+<td>n/a</td>
+<td>OpenAPI 3.0 subset</td>
+</tr>
+<tr>
+<td>MCP</td>
+<td>✅</td>
+<td>✅</td>
+<td><code class="notranslate">inputSchema</code></td>
+<td><code class="notranslate">outputSchema</code></td>
+<td>server handler</td>
+<td><code class="notranslate">title</code>, <code class="notranslate">annotations</code></td>
+<td>JSON Schema</td>
+</tr>
+<tr>
+<td>Vercel AI SDK</td>
+<td>(key)</td>
+<td>✅</td>
+<td><code class="notranslate">inputSchema</code></td>
+<td><code class="notranslate">outputSchema</code></td>
+<td><code class="notranslate">execute</code></td>
+<td>n/a</td>
+<td>Zod / JSON Schema</td>
+</tr>
+<tr>
+<td>Mastra</td>
+<td><code class="notranslate">id</code></td>
+<td>✅</td>
+<td><code class="notranslate">inputSchema</code></td>
+<td><code class="notranslate">outputSchema</code></td>
+<td><code class="notranslate">execute</code></td>
+<td>n/a</td>
+<td>Standard JSON Schema</td>
+</tr>
+<tr>
+<td>Genkit</td>
+<td>✅</td>
+<td>✅</td>
+<td><code class="notranslate">inputSchema</code></td>
+<td><code class="notranslate">outputSchema</code></td>
+<td>fn</td>
+<td>n/a</td>
+<td>Zod</td>
+</tr>
+<tr>
+<td>LangChain</td>
+<td>✅</td>
+<td>✅</td>
+<td><code class="notranslate">schema</code></td>
+<td>n/a</td>
+<td>fn</td>
+<td>n/a</td>
+<td>Zod / inferred</td>
+</tr>
+<tr>
+<td>StandardTool</td>
+<td>✅</td>
+<td>✅</td>
+<td><code class="notranslate">inputSchema</code></td>
+<td><code class="notranslate">outputSchema</code></td>
+<td><code class="notranslate">execute</code></td>
+<td><code class="notranslate">title</code></td>
+<td>Standard (JSON) Schema</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p dir="auto">The columns are nearly identical; the objects are mutually incompatible. And here's the part worth dwelling on: none of these tool primitives is obtainable on its own. Each ships inside a framework package and returns a framework-coupled value.</p>
 <ul dir="auto">
-<li><a href="./overview.html">Overview</a> — the problem, the landscape, and the case for a neutral tool type</li>
-<li><a href="./examples.html">Examples</a> — using a tool with OpenAI, Anthropic, the Vercel AI SDK, and MCP</li>
-<li><a href="https://standardschema.dev" rel="nofollow">Standard Schema</a></li>
-<li><a href="https://standardschema.dev/json-schema" rel="nofollow">Standard JSON Schema</a></li>
-<li><a href="https://github.com/standard-schema/standard-schema">@standard-schema/spec</a></li>
+<li>Mastra's <code class="notranslate">createTool</code> lives in <code class="notranslate">@mastra/core</code> (about 50 MB installed, around 31 deps for agents, workflows, memory, storage, vector, and an HTTP server); the docs say you "most likely don't want to use it as a standalone package."</li>
+<li>Genkit's <code class="notranslate">defineTool</code> is a method on a live <code class="notranslate">genkit()</code> instance, so you can't define a tool without first initializing the framework.</li>
+<li>LangChain's <code class="notranslate">tool()</code> returns a <code class="notranslate">StructuredTool</code> (a Runnable) from <code class="notranslate">@langchain/core</code>.</li>
+<li>The Vercel AI SDK's <code class="notranslate">tool()</code> needs the <code class="notranslate">ai</code> package and yields an SDK-typed <code class="notranslate">Tool</code>.</li>
+</ul>
+<p dir="auto">So "just reuse framework X's tool" means adopting framework X. That gap — identical semantics with incompatible envelopes, each weldable only to its own runtime — is the entire problem.</p>
+<h3 dir="auto" id="the-schema-layer">The schema layer</h3>
+<p dir="auto">The part that's actually standardized:</p>
+<ul dir="auto">
+<li>
+<p dir="auto">JSON Schema is the lingua franca for describing parameters to a model, but it's a family of dialects (draft-07, draft-2020-12, the OpenAPI-3.0 subset, plus provider-specific "strict" constraints).</p>
+</li>
+<li>
+<p dir="auto"><a href="https://standardschema.dev" rel="nofollow">Standard Schema</a> is a roughly 60-line TypeScript interface (<code class="notranslate">~standard</code>) co-designed by the authors of Zod, Valibot, and ArkType, all of which implement it. Despite the name, it's a community convention — a shared interface that spread by adoption, not a standards-body standard; the same goes for Standard JSON Schema. It unifies validation: any tool can call <code class="notranslate">schema['~standard'].validate(value)</code> without knowing which library produced the schema. It's already consumed by tRPC, TanStack Form/Router, and others. Its pitch, reducing N×M integrations to N+M, is exactly the pitch for tools.</p>
+</li>
+<li>
+<p dir="auto"><a href="https://standardschema.dev/json-schema" rel="nofollow">Standard JSON Schema</a> is the newer companion that unifies JSON Schema emission. A single interface:</p>
+<div class="highlight highlight-source-ts" dir="auto"><pre class="notranslate"><span class="pl-k">interface</span> <span class="pl-smi">StandardJSONSchemaV1</span><span class="pl-c1">&lt;</span><span class="pl-smi">Input</span> <span class="pl-c1">=</span> <span class="pl-smi">unknown</span><span class="pl-kos">,</span> <span class="pl-smi">Output</span> <span class="pl-c1">=</span> <span class="pl-smi">Input</span><span class="pl-c1">&gt;</span> <span class="pl-kos">{</span>
+  <span class="pl-k">readonly</span> <span class="pl-s">'~standard'</span>: <span class="pl-kos">{</span>
+    <span class="pl-k">readonly</span> <span class="pl-c1">jsonSchema</span>: <span class="pl-kos">{</span>
+      <span class="pl-k">readonly</span> <span class="pl-c1">input</span>:  <span class="pl-kos">(</span><span class="pl-s1">options</span>: <span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-smi">Target</span><span class="pl-kos">;</span> <span class="pl-c1">libraryOptions</span>?: <span class="pl-smi">Record</span><span class="pl-c1">&lt;</span><span class="pl-smi">string</span><span class="pl-kos">,</span> <span class="pl-smi">unknown</span><span class="pl-c1">&gt;</span> <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-smi">Record</span><span class="pl-c1">&lt;</span><span class="pl-smi">string</span><span class="pl-kos">,</span> <span class="pl-smi">unknown</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>
+      <span class="pl-k">readonly</span> <span class="pl-c1">output</span>: <span class="pl-kos">(</span><span class="pl-s1">options</span>: <span class="pl-kos">{</span> <span class="pl-c1">target</span>: <span class="pl-smi">Target</span><span class="pl-kos">;</span> <span class="pl-c1">libraryOptions</span>?: <span class="pl-smi">Record</span><span class="pl-c1">&lt;</span><span class="pl-smi">string</span><span class="pl-kos">,</span> <span class="pl-smi">unknown</span><span class="pl-c1">&gt;</span> <span class="pl-kos">}</span><span class="pl-kos">)</span> <span class="pl-c1">=&gt;</span> <span class="pl-smi">Record</span><span class="pl-c1">&lt;</span><span class="pl-smi">string</span><span class="pl-kos">,</span> <span class="pl-smi">unknown</span><span class="pl-c1">&gt;</span><span class="pl-kos">;</span>
+    <span class="pl-kos">}</span><span class="pl-kos">;</span>
+    <span class="pl-c">// …Standard Schema validate props…</span>
+  <span class="pl-kos">}</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span>
+<span class="pl-k">type</span> <span class="pl-smi">Target</span> <span class="pl-c1">=</span> <span class="pl-s">'draft-2020-12'</span> <span class="pl-c1">|</span> <span class="pl-s">'draft-07'</span> <span class="pl-c1">|</span> <span class="pl-s">'openapi-3.0'</span> <span class="pl-c1">|</span> <span class="pl-kos">(</span><span class="pl-smi">string</span> <span class="pl-c1">&amp;</span> <span class="pl-kos">{</span><span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<p dir="auto">Crucially, <code class="notranslate">target</code> already includes <code class="notranslate">'openapi-3.0'</code> alongside the JSON Schema drafts, so the dialect problem above is, by design, the schema library's responsibility, selectable per call. Its stated goals: preserve inferred type information through conversion, require zero runtime dependencies, and let ecosystem tools accept user-defined types "without needing to write custom logic or adapters for each supported library."</p>
+</li>
+</ul>
+<p dir="auto">Put the schema layer and the framework objects next to each other and the picture is stark. The schema layer is solved — validation (Standard Schema) and emission (Standard JSON Schema) are both handled, implemented by the major validators, and dependency-free to consume. The envelope is not, and it's the easy part. That inversion is what StandardTool is a response to.</p>
+<h2 dir="auto" id="the-case-against">The case against</h2>
+<p dir="auto">The objections worth taking seriously:</p>
+<p dir="auto"><strong>Adoption</strong> (<a href="https://xkcd.com/927/" rel="nofollow">XKCD 927</a>). A shape that nobody else produces or consumes is just a tidy wrapper for its author, and today that's roughly where StandardTool sits. The bet is that the shape is obvious enough to make adapters trivial, and that Standard Schema shows a neutral interface can spread by adoption rather than mandate. Worth noting that "Standard Schema" and "Standard JSON Schema" aren't ratified standards either; they're conventions that won by adoption (Zod, Valibot, and ArkType implement Standard Schema; tRPC and TanStack consume it), which is the same path this would have to walk. There's no runtime and no lock-in, so the surface area to "win" is small, but it's still one more shape on the pile until others pick it up. This is the honest weak point.</p>
+<p dir="auto"><strong>Why not just extend an existing tool primitive?</strong> Mastra's <code class="notranslate">createTool</code> and the AI SDK's <code class="notranslate">tool()</code> are the closest prior art. The catch (<a href="#framework-and-sdk-tool-objects">above</a>) is that each is bundled inside a framework and returns a framework-coupled value: there's no <code class="notranslate">createTool</code> without <code class="notranslate">@mastra/core</code> (about 50 MB), no <code class="notranslate">defineTool</code> without a live <code class="notranslate">genkit()</code> instance, no <code class="notranslate">tool()</code> without <code class="notranslate">@langchain/core</code> or <code class="notranslate">ai</code>. The neutral, zero-dependency slot is empty. The nearest neutral thing is MCP's <code class="notranslate">Tool</code>, but that's a wire format with no in-process validation or <code class="notranslate">execute</code>. If the ecosystem would rather extend one framework's primitive instead, that's a fine outcome; this exists mainly to make the neutral option concrete enough to argue about.</p>
+<p dir="auto"><strong><code class="notranslate">meta</code> is unparameterized.</strong> Per-call context (<code class="notranslate">execute(input, meta)</code>) is <code class="notranslate">unknown</code>, not a typed generic, because tools are invoked by a model or runtime, not hand-called in typed code, so threading a <code class="notranslate">Meta</code> type param bought friction without much payoff. You annotate it on your handler where you read it; it's the one unparameterized corner of an otherwise typed surface.</p>
+<p dir="auto"><strong><code class="notranslate">outputSchema</code> is rarely consumed.</strong> Most provider APIs ignore output schemas; only MCP-style clients validate them. So today it earns its place through your own runtime safety and documentation, not the model.</p>
+<h2 dir="auto" id="scope-what-this-is-not">Scope: what this is not</h2>
+<ul dir="auto">
+<li>Not an agent runtime. It doesn't loop, plan, or call a model.</li>
+<li>Not a model client. No HTTP, no provider SDKs.</li>
+<li>Not a transport or protocol. MCP defines how tools are served over a wire; StandardTool defines how a tool is shaped in memory. They're complementary, and a StandardTool is trivially served via MCP.</li>
+<li>Not a schema library. It consumes Standard Schema; it doesn't validate or emit JSON Schema itself.</li>
+<li>Not an orchestration framework. No registries, retries, or routing; bring your own.</li>
+</ul>
+<h2 dir="auto" id="open-questions">Open questions</h2>
+<ul dir="auto">
+<li>Should <code class="notranslate">meta</code> be a typed <code class="notranslate">Meta</code> generic rather than <code class="notranslate">unknown</code>? Currently <code class="notranslate">unknown</code> — you annotate it on the handler — to keep the inference surface small.</li>
+<li>Should the formatting layer live on the tool type at all? The normative <code class="notranslate">StandardTool</code> stays formatting-free; the separate <code class="notranslate">FormattableStandardTool</code> type adds <code class="notranslate">.formatted()</code> plus the carried <code class="notranslate">executeRaw</code>, so a neutral tool is a plain object and a formatted one can still be re-targeted. Whether that belongs on a tool type or in a fully separate utility is a judgment call.</li>
+</ul>
+<h2 dir="auto" id="links">Links</h2>
+<p dir="auto"><strong>Standards this builds on</strong></p>
+<ul dir="auto">
+<li><a href="https://standardschema.dev" rel="nofollow">Standard Schema</a> — the shared validation interface</li>
+<li><a href="https://standardschema.dev/json-schema" rel="nofollow">Standard JSON Schema</a> — the companion for JSON Schema emission</li>
+<li><a href="https://github.com/standard-schema/standard-schema"><code class="notranslate">@standard-schema/spec</code></a> — the official, types-only package</li>
+</ul>
+<p dir="auto"><strong>Provider &amp; protocol tool formats</strong></p>
+<ul dir="auto">
+<li><a href="https://developers.openai.com/api/docs/guides/function-calling" rel="nofollow">OpenAI function calling</a> · <a href="https://openai.com/index/introducing-structured-outputs-in-the-api/" rel="nofollow">Structured Outputs</a></li>
+<li><a href="https://platform.claude.com/docs/en/build-with-claude/tool-use" rel="nofollow">Anthropic tool use</a></li>
+<li><a href="https://ai.google.dev/gemini-api/docs/function-calling" rel="nofollow">Google Gemini function calling</a></li>
+<li><a href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools" rel="nofollow">MCP tools specification (2025-06-18)</a></li>
+</ul>
+<p dir="auto"><strong>Framework tool objects</strong></p>
+<ul dir="auto">
+<li><a href="https://ai-sdk.dev/docs/reference/ai-sdk-core/tool" rel="nofollow">Vercel AI SDK <code class="notranslate">tool()</code></a> · <a href="https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling" rel="nofollow">tools &amp; tool calling</a></li>
+<li><a href="https://mastra.ai/reference/tools/create-tool" rel="nofollow">Mastra <code class="notranslate">createTool</code></a> · <a href="https://www.npmjs.com/package/@mastra/core" rel="nofollow"><code class="notranslate">@mastra/core</code></a></li>
+<li><a href="https://genkit.dev/docs/tool-calling/" rel="nofollow">Genkit tool calling</a></li>
+<li><a href="https://www.npmjs.com/package/@langchain/core" rel="nofollow">LangChain <code class="notranslate">@langchain/core</code></a></li>
+<li><a href="https://xkcd.com/927/" rel="nofollow">XKCD 927, "Standards"</a></li>
 </ul>
 <h2 dir="auto" id="license">License</h2>
 <p dir="auto">MIT © Andrey Gubanov</p>
 </main>
-<a class="card" href="./overview.html"><div><h3>Overview</h3><p>Why StandardTool exists, and the landscape it fits into.</p></div><span class="arrow">&rarr;</span></a><a class="card" href="./examples.html"><div><h3>Examples</h3><p>Wire one tool into OpenAI, Anthropic, the AI SDK, and MCP.</p></div><span class="arrow">&rarr;</span></a>
 <footer>
 <a href="https://github.com/finom/standard-tool">GitHub</a>
 <a href="https://www.npmjs.com/package/standard-tool">npm</a>
-<a href="./overview.html">Overview</a>
-<a href="./examples.html">Examples</a>
 <span>hosted on js.org</span>
 </footer>
 </div>

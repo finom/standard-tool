@@ -139,6 +139,7 @@ test('neutral execute throws StandardToolValidationError on invalid input', asyn
       assert.ok(err instanceof StandardToolValidationError);
       assert.equal(err.target, 'input');
       assert.match(err.message, /^input validation failed:/);
+      assert.match(err.message, /city: /); // the failing field's path is inlined into the message
       assert.deepEqual(err.issues[0].path, ['city']);
       return true;
     }

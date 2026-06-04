@@ -60,12 +60,6 @@ export function standardTool<Input = unknown, Output = unknown>(
   return tool;
 }
 
-/** Prefix an issue with its dotted field path (`city: …`) so a failure says which argument to fix. */
-const formatIssue = (i: StandardSchemaV1.Issue) => {
-  const path = i.path?.map((s) => (typeof s === 'object' ? s.key : s)).join('.');
-  return path ? `${path}: ${i.message}` : i.message;
-};
-
 /** Thrown when a tool's input or output fails validation; carries the side and the Standard Schema issues. */
 export class StandardToolValidationError extends Error {
   readonly name = 'StandardToolValidationError';
@@ -73,7 +67,14 @@ export class StandardToolValidationError extends Error {
     readonly target: 'input' | 'output',
     readonly issues: readonly StandardSchemaV1.Issue[]
   ) {
-    super(`${target} validation failed: ${issues.map(formatIssue).join('; ')}`);
+    super(
+      `${target} validation failed: ${issues
+        .map((i) => {
+          const at = (i.path ?? []).map((s) => String(typeof s === 'object' ? s.key : s)).join('.');
+          return at ? `${at}: ${i.message}` : i.message;
+        })
+        .join('; ')}`
+    );
   }
 }
 

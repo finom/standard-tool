@@ -9,7 +9,14 @@ export class StandardToolValidationError extends Error {
     readonly target: 'input' | 'output',
     readonly issues: readonly StandardSchemaV1.Issue[]
   ) {
-    super(`${target} validation failed: ${issues.map((i) => i.message).join('; ')}`);
+    super(
+      `${target} validation failed: ${issues
+        .map((i) => {
+          const at = (i.path ?? []).map((s) => String(typeof s === 'object' ? s.key : s)).join('.');
+          return at ? `${at}: ${i.message}` : i.message;
+        })
+        .join('; ')}`
+    );
   }
 }
 

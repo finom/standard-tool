@@ -34,12 +34,12 @@ A tool is **neutral** when `FormattedOutput = Output`: `execute` returns the raw
 ```ts
 interface FormattableStandardTool<Input = unknown, Output = unknown, FormattedOutput = Output>
   extends StandardTool<Input, Output, FormattedOutput> {
-  executeUnformatted(input: Input, meta?: unknown): Promise<Output>;  // always the raw, throwing Output
+  executeRaw(input: Input, meta?: unknown): Output | Promise<Output>;  // the bare handler — no validation
   formatted<F>(format?: (result: Output | Error) => F | Promise<F>): FormattableStandardTool<Input, Output, F>;
 }
 ```
 
-It always carries `executeUnformatted` (the raw `Output`), so formatting never stacks on formatting — each `.formatted()` re-derives from the raw. A tool a framework shipped pre-formatted for itself can still be re-targeted by you, or read raw. Both members are additive, so every `FormattableStandardTool` is also a valid `StandardTool`.
+It carries `executeRaw` (the bare handler, no validation) for frameworks that validate their own way, and a `.formatted()` that re-derives from the validated `execute` — so formatting never stacks on formatting. A tool a framework shipped pre-formatted for itself can still be re-targeted by you, or run raw. Both members are additive, so every `FormattableStandardTool` is also a valid `StandardTool`.
 
 ## Reference implementation: `standardTool()`
 
@@ -105,10 +105,10 @@ export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput
   execute(input: Input, meta?: unknown): FormattedOutput | Promise<FormattedOutput>;
 }
 
-/** A `StandardTool` that keeps its raw, throwing `executeUnformatted`, so it can be formatted and re-formatted. */
+/** A `StandardTool` that exposes the unvalidated `executeRaw` and can (re-)format its validated result. */
 export interface FormattableStandardTool<Input = unknown, Output = unknown, FormattedOutput = Output>
   extends StandardTool<Input, Output, FormattedOutput> {
-  executeUnformatted(input: Input, meta?: unknown): Promise<Output>;
+  executeRaw(input: Input, meta?: unknown): Output | Promise<Output>;
   formatted<F = Output | { error: string }>(
     format?: (result: Output | Error) => F | Promise<F>
   ): FormattableStandardTool<Input, Output, F>;
@@ -118,17 +118,17 @@ export interface FormattableStandardTool<Input = unknown, Output = unknown, Form
 export function standardTool<Input = unknown, Output = unknown>(
   def: StandardTool<Input, Output>
 ): FormattableStandardTool<Input, Output, Output> {
-  const { execute: handler, ...rest } = def;
+  const { execute: executeRaw, ...rest } = def;
+  // `executeRaw` is the bare handler (no validation); `execute` wraps it with input/output validation and throws.
   const execute = async (input: Input, meta?: unknown): Promise<Output> => {
     const value = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
-    const output = await handler(value, meta);
+    const output = await executeRaw(value, meta);
     return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
   };
-  // `execute` (the raw, validating, throwing call) doubles as `executeUnformatted`; `.formatted()` wraps it.
   const tool: FormattableStandardTool<Input, Output, Output> = {
     ...rest,
     execute,
-    executeUnformatted: execute,
+    executeRaw,
     formatted<F = Output | { error: string }>(
       format?: (result: Output | Error) => F | Promise<F>
     ): FormattableStandardTool<Input, Output, F> {
@@ -136,8 +136,8 @@ export function standardTool<Input = unknown, Output = unknown>(
       const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
         result: Output | Error
       ) => F | Promise<F>;
-      // Re-derive from the raw `execute`, never the previous formatting; `...tool` carries everything else
-      // (including this method), so the result stays re-formattable.
+      // Wrap the validated `execute`, never the previous formatting; `...tool` carries everything else
+      // (including this method and `executeRaw`), so the result stays re-formattable.
       return {
         ...tool,
         async execute(input, meta) {
@@ -172,7 +172,7 @@ The convention is the **`StandardTool`** type (normative, no methods); **`Format
 import { standardTool, type StandardTool, type FormattableStandardTool } from 'standard-tool';
 
 standardTool(def): FormattableStandardTool<Input, Output>;          // reference impl: validates in & out, throws on a violation
-tool.formatted(format?): FormattableStandardTool<Input, Output, F>; // opt into a consumer-specific result (or { error } envelope)
+tool.formatted(format?): FormattableStandardTool<Input, Output, F>;    // opt into a consumer-specific result (or { error } envelope)
 ```
 
 `Input` and `Output` are your data types: what your `execute` accepts and returns. The optional schemas describe them. A neutral tool's `execute` validates both, returns the validated `Output`, and throws on a violation. `execute` also takes an optional second `meta` argument — per-call runtime context forwarded verbatim to your handler, never validated and never in the JSON Schema (see [Per-call runtime context](#per-call-runtime-context-meta)).
@@ -193,7 +193,7 @@ tool.formatted(format?): FormattableStandardTool<Input, Output, F>; // opt into 
 
 | member | type | purpose |
 | --- | --- | --- |
-| `executeUnformatted` | `(input: Input, meta?: unknown) => Promise<Output>` | the validated, throwing, *unformatted* execute. On a neutral tool it is identical to `execute`; formatting keeps it intact, so the raw `Output` stays reachable |
+| `executeRaw` | `(input: Input, meta?: unknown) => Output \| Promise<Output>` | the bare handler — runs your logic with **no** validation or formatting. Hand it to a framework that validates its own way (alongside `inputSchema`); formatting keeps it intact |
 | `formatted` | `(format?) => FormattableStandardTool<Input, Output, F>` | opt into a consumer-specific result; see [Formatting the result](#formatting-the-result) |
 
 The thrown `StandardToolValidationError` carries `target: 'input' \| 'output'` and the Standard Schema `issues`, so a formatter (or a `catch`) can build a rich result.
@@ -272,15 +272,15 @@ const strict = getWeather.formatted((r) => {
 });
 ```
 
-Formatting swaps only that third generic; `Input` and `Output` are untouched, and the validated, unformatted execute is carried along as `executeUnformatted`. So a formatted tool stays re-formattable, and its raw `Output` stays reachable:
+Formatting swaps only that third generic; `Input` and `Output` are untouched, and the bare handler is carried along as `executeRaw`. So a formatted tool stays re-formattable, and the unvalidated handler stays reachable:
 
 ```ts
 const enveloped = getWeather.formatted();                     // { error } envelope
-await enveloped.executeUnformatted({ city: 'Paris' });        // → { tempC: 21 } (raw; still validates + throws)
-await enveloped.formatted(asText).execute({ city: 'Paris' }); // → '21°C', re-derived from the raw Output
+await enveloped.executeRaw({ city: 'Paris' });             // → { tempC: 21 } (the bare handler; no validation)
+await enveloped.formatted(asText).execute({ city: 'Paris' }); // → '21°C', re-derived from the validated Output
 ```
 
-Re-formatting *replaces*, it doesn't compose: each `formatted()` re-derives from the unformatted result, never from the previous formatting. That's what lets a framework ship a tool pre-formatted for itself while you stay free to re-target it for another consumer — or read the raw `Output`.
+Re-formatting *replaces*, it doesn't compose: each `formatted()` re-derives from the validated `execute`, never from the previous formatting. That's what lets a framework ship a tool pre-formatted for itself while you stay free to re-target it for another consumer — or run the bare `executeRaw`.
 
 ## MCP-compatible output
 

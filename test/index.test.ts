@@ -5,10 +5,10 @@ import { standardTool, StandardToolValidationError, type StandardTool } from '..
 
 // Compile-time type assertions (checked by `npm run typecheck`). expectType<T> accepts
 // only `true`, so a wrong type fails to compile. ExecOut<T> = the awaited execute() return;
-// RawOut<T> = the awaited executeUnformatted() return.
+// RawOut<T> = the awaited executeRaw() return.
 type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type ExecOut<T extends { execute: (input: never) => unknown }> = Awaited<ReturnType<T['execute']>>;
-type RawOut<T extends { executeUnformatted: (input: never) => unknown }> = Awaited<ReturnType<T['executeUnformatted']>>;
+type RawOut<T extends { executeRaw: (input: never) => unknown }> = Awaited<ReturnType<T['executeRaw']>>;
 const expectType = <_Pass extends true>(): void => {};
 
 // Real Zod schemas (Zod 4.2+ implements both Standard Schema and Standard JSON Schema).
@@ -94,12 +94,12 @@ expectType<Equals<ExecOut<typeof reformatted>, string>>();
 // Runtime behavior. Error assertions check standardTool's prefix and the Standard
 // Schema issue path, not Zod's wording, so they hold across Zod versions.
 
-test('FormattableStandardTool exposes the neutral shape plus executeUnformatted + formatted', () => {
+test('FormattableStandardTool exposes the neutral shape plus executeRaw + formatted', () => {
   // weather declares no title, so the optional key is absent (not set to undefined).
   assert.deepEqual(Object.keys(weather).sort(), [
     'description',
     'execute',
-    'executeUnformatted',
+    'executeRaw',
     'formatted',
     'inputSchema',
     'name',
@@ -109,8 +109,8 @@ test('FormattableStandardTool exposes the neutral shape plus executeUnformatted 
   weather satisfies StandardTool<{ city: string }, { tempC: number }>;
 });
 
-test('a neutral tool has the same execute and executeUnformatted', () => {
-  assert.equal(weather.execute, weather.executeUnformatted);
+test('executeRaw is the bare handler, distinct from the validating execute', () => {
+  assert.notEqual(weather.execute, weather.executeRaw);
 });
 
 test('passes the optional title through (omitted, not set to undefined, when absent)', () => {
@@ -163,6 +163,20 @@ test('neutral execute throws StandardToolValidationError on invalid output', asy
   );
 });
 
+test('executeRaw skips input and output validation (execute does both)', async () => {
+  const bad = standardTool({
+    name: 'bad',
+    description: 'returns the wrong shape',
+    inputSchema,
+    outputSchema,
+    execute: async () => ({ tempC: 'hot' }) as unknown as { tempC: number },
+  });
+  // execute validates the output → throws.
+  await assert.rejects(() => Promise.resolve(bad.execute({ city: 'Paris' })), StandardToolValidationError);
+  // executeRaw runs the handler verbatim → no throw, returns the unvalidated value (input validation skipped too).
+  assert.deepEqual(await bad.executeRaw({ city: 123 } as unknown as { city: string }), { tempC: 'hot' });
+});
+
 test('neutral execute rethrows what the handler threw (not wrapped)', async () => {
   const boom = standardTool({
     name: 'boom',
@@ -191,9 +205,9 @@ test('optional schemas: validation skipped when omitted', async () => {
 
 test('forwards the per-call meta argument verbatim to the handler', async () => {
   assert.equal(await greet.execute({ name: 'Ada' }, { locale: 'en' }), 'hi Ada');
-  // meta still reaches the handler after formatting (it flows through executeUnformatted).
+  // meta still reaches the handler after formatting, and through the bare handler.
   assert.equal(await greet.formatted().execute({ name: 'Bob' }, { locale: 'fr' }), 'bonjour Bob');
-  assert.equal(await greet.executeUnformatted({ name: 'Cy' }, { locale: 'fr' }), 'bonjour Cy');
+  assert.equal(await greet.executeRaw({ name: 'Cy' }, { locale: 'fr' }), 'bonjour Cy');
 });
 
 test('default generics: bare StandardTool needs no type args and holds heterogeneous tools', () => {
@@ -236,34 +250,32 @@ test('async formatter is awaited', async () => {
   assert.match(out.status, /^input validation failed:/);
 });
 
-test('executeUnformatted stays raw and throwing even after formatting', async () => {
-  // mcpWeather.execute returns an MCP envelope, but the unformatted execute is still the raw, throwing one.
+test('executeRaw stays the bare, unvalidated handler even after formatting', async () => {
+  // formatted() changes execute (→ MCP envelope), but executeRaw is still the raw handler.
   assert.deepEqual(await mcpWeather.execute({ city: 'Paris' }), {
     content: [{ type: 'text', text: '{"tempC":21}' }],
     structuredContent: { tempC: 21 },
   });
-  assert.deepEqual(await mcpWeather.executeUnformatted({ city: 'Paris' }), { tempC: 21 });
-  await assert.rejects(
-    () => mcpWeather.executeUnformatted({ city: 123 } as unknown as { city: string }),
-    StandardToolValidationError
-  );
+  assert.deepEqual(await mcpWeather.executeRaw({ city: 'Paris' }), { tempC: 21 });
+  // no validation: bad input does not throw — the handler just runs.
+  assert.deepEqual(await mcpWeather.executeRaw({ city: 123 } as unknown as { city: string }), { tempC: 21 });
 });
 
-test('re-formatting replaces and re-derives from the raw Output, never the previous formatting', async () => {
+test('re-formatting replaces and re-derives from the validated execute, never the previous formatting', async () => {
   // Format to MCP, then to string. The string formatter sees { tempC }, NOT the MCP envelope.
   const out = await weather.formatted(toMcpResult).formatted(toStr).execute({ city: 'Paris' });
-  assert.equal(out, 'ok: 21'); // 'ok: 21' (from raw), not 'ok: undefined' (which a composed envelope would give)
+  assert.equal(out, 'ok: 21'); // 'ok: 21' (from the validated Output), not 'ok: undefined' (a composed envelope)
 });
 
 test('the headline case: a framework ships a pre-formatted tool, a consumer re-targets it', async () => {
   // A framework hands out an MCP-shaped tool.
   const shipped = weather.formatted(toMcpResult);
   assert.equal((await shipped.execute({ city: 'Paris' })).content[0].text, '{"tempC":21}');
-  // The consumer re-formats it for a different consumer — derived from the raw Output, not the MCP shape.
+  // The consumer re-formats it for a different consumer — derived from the validated Output, not the MCP shape.
   const retargeted = shipped.formatted(toStr);
   assert.equal(await retargeted.execute({ city: 'Paris' }), 'ok: 21');
-  // …or just takes the raw Output.
-  assert.deepEqual(await shipped.executeUnformatted({ city: 'Paris' }), { tempC: 21 });
+  // …or just runs the bare, unvalidated handler.
+  assert.deepEqual(await shipped.executeRaw({ city: 'Paris' }), { tempC: 21 });
 });
 
 test('MCP formatter: object output → JSON text block + structuredContent', async () => {

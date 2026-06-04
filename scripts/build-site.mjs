@@ -1,6 +1,6 @@
 // Builds the docs/ site served at standard-tool.js.org (GitHub Pages).
-// Renders README.md, OVERVIEW.md, and EXAMPLES.md to HTML via GitHub's GFM markdown API,
-// then wraps them in a dark monospace theme. Re-run after editing the docs:
+// Renders README.md to HTML via GitHub's GFM markdown API, then wraps it in a dark
+// monospace theme. Re-run after editing the README:
 //   GH_TOKEN=$(gh auth token) node scripts/build-site.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -22,12 +22,12 @@ async function render(md) {
   });
   if (!res.ok) throw new Error(`GitHub markdown API ${res.status}: ${await res.text()}`);
   // Align heading ids with their in-page #anchor links (GitHub prefixes ids with user-content-).
-  return rewriteDocLinks(addHeadingIds((await res.text()).replaceAll('user-content-', '')));
+  return addHeadingIds((await res.text()).replaceAll('user-content-', ''));
 }
 
 // The raw markdown API does not emit heading ids, so in-page #anchor links would be dead.
 // Re-add them with the same slug algorithm GitHub uses (github-slugger).
-const SLUG_STRIP = /[\u2000-\u206F\u2E00-\u2E7F\\'!"#$%&()*+,./:;<=>?@[\]^`{|}~]/g;
+const SLUG_STRIP = /[ -⁯⸀-⹿\\'!"#$%&()*+,./:;<=>?@[\]^`{|}~]/g;
 const slug = (s) => s.toLowerCase().trim().replace(SLUG_STRIP, '').replace(/ /g, '-');
 
 function addHeadingIds(html) {
@@ -47,14 +47,6 @@ function addHeadingIds(html) {
   });
 }
 
-// Cross-doc links are written as .md (so they work on GitHub); map them onto the built site's page names.
-function rewriteDocLinks(html) {
-  return html
-    .replace(/href="\.\/README\.md(#[^"]*)?"/g, 'href="./$1"')
-    .replace(/href="\.\/OVERVIEW\.md(#[^"]*)?"/g, 'href="./overview.html$1"')
-    .replace(/href="\.\/EXAMPLES\.md(#[^"]*)?"/g, 'href="./examples.html$1"');
-}
-
 const CSS = `:root{--bg:#09090b;--bg-deep:#030712;--fg:#fafafa;--muted:#a1a1aa;--border:#6b7280;--line:#27272a;--mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
 *{box-sizing:border-box}
 html{background:var(--bg-deep)}
@@ -67,11 +59,6 @@ header.nav{display:flex;align-items:center;justify-content:space-between;gap:16p
 .nav-links{display:flex;gap:8px;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--border);border-radius:6px;padding:5px 11px;color:var(--fg);text-decoration:none;font-size:13px;line-height:1}
 .btn:hover{background:rgba(255,255,255,.06)}
-.card{display:flex;align-items:center;justify-content:space-between;gap:16px;border:2px solid var(--border);border-radius:4px;padding:16px 20px;color:var(--fg);text-decoration:none;margin:40px 0 0}
-.card:hover{background:rgba(255,255,255,.045)}
-.card h3{margin:0 0 4px;font-size:18px;font-weight:600}
-.card p{margin:0;font-size:13px;color:var(--muted)}
-.card .arrow{font-size:20px;opacity:.8}
 footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--muted);display:flex;gap:18px;flex-wrap:wrap;align-items:center}
 footer a{color:var(--muted)}
 footer a:hover{color:var(--fg)}
@@ -113,7 +100,7 @@ footer a:hover{color:var(--fg)}
 const FAVICON =
   "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%2309090b'/><text x='8' y='12' font-size='10' text-anchor='middle' fill='%23fafafa' font-family='monospace'>%7B%7D</text></svg>";
 
-function page({ title, description, nav, bodyHtml, cta }) {
+function page({ title, description, nav, bodyHtml }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -135,12 +122,9 @@ function page({ title, description, nav, bodyHtml, cta }) {
 <main class="md">
 ${bodyHtml}
 </main>
-${cta}
 <footer>
 <a href="https://github.com/finom/standard-tool">GitHub</a>
 <a href="https://www.npmjs.com/package/standard-tool">npm</a>
-<a href="./overview.html">Overview</a>
-<a href="./examples.html">Examples</a>
 <span>hosted on js.org</span>
 </footer>
 </div>
@@ -151,54 +135,21 @@ ${cta}
 
 const gh = `<a class="btn" href="https://github.com/finom/standard-tool">GitHub</a>`;
 const npm = `<a class="btn" href="https://www.npmjs.com/package/standard-tool">npm</a>`;
-const overviewBtn = `<a class="btn" href="./overview.html">Overview</a>`;
-const examplesBtn = `<a class="btn" href="./examples.html">Examples</a>`;
-const homeBtn = `<a class="btn" href="./">README</a>`;
-const overviewCard = `<a class="card" href="./overview.html"><div><h3>Overview</h3><p>Why StandardTool exists, and the landscape it fits into.</p></div><span class="arrow">&rarr;</span></a>`;
-const examplesCard = `<a class="card" href="./examples.html"><div><h3>Examples</h3><p>Wire one tool into OpenAI, Anthropic, the AI SDK, and MCP.</p></div><span class="arrow">&rarr;</span></a>`;
-const homeCard = `<a class="card" href="./"><div><h3>Get started</h3><p>Install, the type, and the reference implementation.</p></div><span class="arrow">&rarr;</span></a>`;
 
 const readmeMd = readFileSync(join(root, 'README.md'), 'utf8');
 // The npm/CI badges sit on the README's H1 (after &nbsp;) for GitHub; strip them from the site's title.
 const readmeForSite = readmeMd.replace(/^(# StandardTool)\s*&nbsp;.*$/m, '$1');
-const overviewMd = readFileSync(join(root, 'OVERVIEW.md'), 'utf8');
-const examplesMd = readFileSync(join(root, 'EXAMPLES.md'), 'utf8');
-const [readmeHtml, overviewHtml, examplesHtml] = await Promise.all([
-  render(readmeForSite),
-  render(overviewMd),
-  render(examplesMd),
-]);
+const readmeHtml = await render(readmeForSite);
 
 writeFileSync(
   join(docs, 'index.html'),
   page({
     title: 'StandardTool',
     description: 'A common type for defining LLM tools, built on Standard Schema and Standard JSON Schema.',
-    nav: overviewBtn + examplesBtn + gh + npm,
+    nav: gh + npm,
     bodyHtml: readmeHtml,
-    cta: overviewCard + examplesCard,
-  })
-);
-writeFileSync(
-  join(docs, 'overview.html'),
-  page({
-    title: 'Overview · StandardTool',
-    description: 'Why StandardTool exists: the landscape, the diagnosis, and the case for a neutral tool type.',
-    nav: homeBtn + examplesBtn + gh + npm,
-    bodyHtml: overviewHtml,
-    cta: examplesCard + homeCard,
-  })
-);
-writeFileSync(
-  join(docs, 'examples.html'),
-  page({
-    title: 'Examples · StandardTool',
-    description: 'Wiring a StandardTool into OpenAI, Anthropic, the Vercel AI SDK, and MCP.',
-    nav: homeBtn + overviewBtn + gh + npm,
-    bodyHtml: examplesHtml,
-    cta: overviewCard + homeCard,
   })
 );
 writeFileSync(join(docs, 'CNAME'), 'standard-tool.js.org\n');
 writeFileSync(join(docs, '.nojekyll'), '');
-console.log('Built: docs/index.html, docs/overview.html, docs/examples.html, docs/CNAME, docs/.nojekyll');
+console.log('Built: docs/index.html, docs/CNAME, docs/.nojekyll');

@@ -23,10 +23,10 @@ export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput
   execute(input: Input, meta?: unknown): FormattedOutput | Promise<FormattedOutput>;
 }
 
-/** A `StandardTool` that keeps its raw, throwing `executeUnformatted`, so it can be formatted and re-formatted. */
+/** A `StandardTool` that exposes the unvalidated `executeRaw` and can (re-)format its validated result. */
 export interface FormattableStandardTool<Input = unknown, Output = unknown, FormattedOutput = Output>
   extends StandardTool<Input, Output, FormattedOutput> {
-  executeUnformatted(input: Input, meta?: unknown): Promise<Output>;
+  executeRaw(input: Input, meta?: unknown): Output | Promise<Output>;
   formatted<F = Output | { error: string }>(
     format?: (result: Output | Error) => F | Promise<F>
   ): FormattableStandardTool<Input, Output, F>;
@@ -36,17 +36,17 @@ export interface FormattableStandardTool<Input = unknown, Output = unknown, Form
 export function standardTool<Input = unknown, Output = unknown>(
   def: StandardTool<Input, Output>
 ): FormattableStandardTool<Input, Output, Output> {
-  const { execute: handler, ...rest } = def;
+  const { execute: executeRaw, ...rest } = def;
+  // `executeRaw` is the bare handler (no validation); `execute` wraps it with input/output validation and throws.
   const execute = async (input: Input, meta?: unknown): Promise<Output> => {
     const value = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
-    const output = await handler(value, meta);
+    const output = await executeRaw(value, meta);
     return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
   };
-  // `execute` (the raw, validating, throwing call) doubles as `executeUnformatted`; `.formatted()` wraps it.
   const tool: FormattableStandardTool<Input, Output, Output> = {
     ...rest,
     execute,
-    executeUnformatted: execute,
+    executeRaw,
     formatted<F = Output | { error: string }>(
       format?: (result: Output | Error) => F | Promise<F>
     ): FormattableStandardTool<Input, Output, F> {
@@ -54,8 +54,8 @@ export function standardTool<Input = unknown, Output = unknown>(
       const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
         result: Output | Error
       ) => F | Promise<F>;
-      // Re-derive from the raw `execute`, never the previous formatting; `...tool` carries everything else
-      // (including this method), so the result stays re-formattable.
+      // Wrap the validated `execute`, never the previous formatting; `...tool` carries everything else
+      // (including this method and `executeRaw`), so the result stays re-formattable.
       return {
         ...tool,
         async execute(input, meta) {

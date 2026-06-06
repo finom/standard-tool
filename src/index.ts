@@ -2,43 +2,46 @@ import type { StandardSchemaV1, StandardJSONSchemaV1 } from './standard-schema.j
 
 type CombinedSpec<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
 
-/** Portable LLM tool. Neutral (`FormattedOutput = Output`): `execute` validates in & out, returns `Output`, and throws. */
-export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output> {
+/**
+ * Portable LLM tool. Neutral (`FormattedOutput = Output`): `execute` validates in & out, returns `Output`, and
+ * throws. `Meta` types the optional per-call context (defaults to `unknown`; annotate the handler to set it).
+ */
+export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> {
   name: string;
   title?: string;
   description: string;
   inputSchema?: CombinedSpec<Input>;
   outputSchema?: CombinedSpec<Output>;
-  execute(input: Input, meta?: unknown): FormattedOutput | Promise<FormattedOutput>;
+  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>;
 }
 
 /** A `StandardTool` that exposes the unvalidated `executeRaw` and can (re-)format its validated result. */
-export interface FormattableStandardTool<Input = unknown, Output = unknown, FormattedOutput = Output>
-  extends StandardTool<Input, Output, FormattedOutput> {
-  executeRaw(input: Input, meta?: unknown): Output | Promise<Output>;
+export interface FormattableStandardTool<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown>
+  extends StandardTool<Input, Output, FormattedOutput, Meta> {
+  executeRaw(input: Input, meta?: Meta): Output | Promise<Output>;
   formatted<F = Output | { error: string }>(
     format?: (result: Output | Error) => F | Promise<F>
-  ): FormattableStandardTool<Input, Output, F>;
+  ): FormattableStandardTool<Input, Output, F, Meta>;
 }
 
 /** Reference implementation: validate input → run the handler → validate output. The result is re-formattable. */
-export function standardTool<Input = unknown, Output = unknown>(
-  def: StandardTool<Input, Output>
-): FormattableStandardTool<Input, Output, Output> {
+export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
+  def: StandardTool<Input, Output, Output, Meta>
+): FormattableStandardTool<Input, Output, Output, Meta> {
   const { execute: executeRaw, ...rest } = def;
   // `executeRaw` is the bare handler (no validation); `execute` wraps it with input/output validation and throws.
-  const execute = async (input: Input, meta?: unknown): Promise<Output> => {
+  const execute = async (input: Input, meta?: Meta): Promise<Output> => {
     const value = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
     const output = await executeRaw(value, meta);
     return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
   };
-  const tool: FormattableStandardTool<Input, Output, Output> = {
+  const tool: FormattableStandardTool<Input, Output, Output, Meta> = {
     ...rest,
     execute,
     executeRaw,
     formatted<F = Output | { error: string }>(
       format?: (result: Output | Error) => F | Promise<F>
-    ): FormattableStandardTool<Input, Output, F> {
+    ): FormattableStandardTool<Input, Output, F, Meta> {
       // Default formatter: pass a success through, turn a thrown Error into `{ error }`.
       const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
         result: Output | Error

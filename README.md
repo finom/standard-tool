@@ -21,13 +21,13 @@ So the effort is inverted. Frameworks pour energy into re-inventing the trivial 
 The convention *is* the type. Any object of this shape is a StandardTool — no base class, no runtime, no package required:
 
 ```ts
-interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output> {
+interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> {
   name: string;
   title?: string;                      // human label; surfaced by MCP-style clients in tool-list UIs
   description: string;
   inputSchema?: CombinedSpec<Input>;   // validates Input + emits JSON Schema
   outputSchema?: CombinedSpec<Output>; // validates Output + emits JSON Schema
-  execute(input: Input, meta?: unknown): FormattedOutput | Promise<FormattedOutput>;
+  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>; // Meta: optional per-call context
 }
 ```
 
@@ -35,7 +35,7 @@ interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Outp
 
 The shape maps almost 1:1 onto MCP's `Tool` (`name`, `title`, `description`, `inputSchema`, `outputSchema`), which is why a StandardTool plugs into an MCP server with no translation and into provider APIs with a one-line `.map`.
 
-A tool is **neutral** when `FormattedOutput = Output`: `execute` returns the raw `Output`. The third parameter lets the same type describe a **formatted** tool too — one whose `execute` returns a consumer-specific shape (an MCP envelope, or `{ error }` on failure). Producing those is the job of [`FormattableStandardTool`](#the-formatting-layer). `StandardTool` is the normative surface; the `standardTool()` function below is only a reference implementation — anything that produces a matching object interoperates.
+A tool is **neutral** when `FormattedOutput = Output`: `execute` returns the raw `Output`. The third parameter lets the same type describe a **formatted** tool too — one whose `execute` returns a consumer-specific shape (an MCP envelope, or `{ error }` on failure). Producing those is the job of [`FormattableStandardTool`](#the-formatting-layer). The fourth parameter, `Meta`, types the optional per-call context and defaults to `unknown` ([more below](#per-call-context-meta)). `StandardTool` is the normative surface; the `standardTool()` function below is only a reference implementation — anything that produces a matching object interoperates.
 
 ## Quick start
 
@@ -82,10 +82,10 @@ Prefer no dependency at all? [Copy-paste the ~70-line source](#zero-dependency-c
 `StandardTool` stays minimal — `{ name, title?, description, inputSchema?, outputSchema?, execute }`, no methods — so anything can produce or consume one with a plain object and zero dependencies. The reference `standardTool()` returns a **`FormattableStandardTool`**: that same shape plus two additive members, so a `FormattableStandardTool` is always a valid `StandardTool`.
 
 ```ts
-interface FormattableStandardTool<Input = unknown, Output = unknown, FormattedOutput = Output>
-  extends StandardTool<Input, Output, FormattedOutput> {
-  executeRaw(input: Input, meta?: unknown): Output | Promise<Output>;  // the bare handler — no validation
-  formatted<F>(format?: (result: Output | Error) => F | Promise<F>): FormattableStandardTool<Input, Output, F>;
+interface FormattableStandardTool<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown>
+  extends StandardTool<Input, Output, FormattedOutput, Meta> {
+  executeRaw(input: Input, meta?: Meta): Output | Promise<Output>;  // the bare handler — no validation
+  formatted<F>(format?: (result: Output | Error) => F | Promise<F>): FormattableStandardTool<Input, Output, F, Meta>;
 }
 ```
 
@@ -131,20 +131,21 @@ Re-formatting *replaces*, it doesn't compose: each `formatted()` re-derives from
 
 Tools often need per-call data that should not appear in the model-facing `inputSchema` — a locale, an auth token, a request-scoped DB handle. `execute` takes an optional second `meta` argument, forwarded verbatim to your handler. It's never validated and never part of the JSON Schema, so your tools can stay static (defined once at module scope) while you inject context at call time, instead of closing over it in a per-render factory.
 
-`meta` is typed `unknown`. Annotate it on your handler to type it at the call site:
+`meta` is the tool's fourth generic, `Meta`, and defaults to `unknown`. Annotate it on your handler and that type **propagates** — every caller of `execute` (and `executeRaw`) sees it, so a wrong `meta` is a compile error at the call site instead of a silent `unknown`:
 
 ```ts
 const greet = standardTool({
   name: 'greet',
   description: 'Greet a person in the caller-supplied locale',
   inputSchema: z.object({ name: z.string() }),
-  execute: ({ name }, meta: { locale: string }) => (meta.locale === 'fr' ? `bonjour ${name}` : `hi ${name}`), // annotate meta here
+  execute: ({ name }, meta: { locale: string }) => (meta.locale === 'fr' ? `bonjour ${name}` : `hi ${name}`), // annotating meta sets Meta
 });
 
 await greet.execute({ name: 'Ada' }, { locale: 'fr' }); // → 'bonjour Ada'
+await greet.execute({ name: 'Ada' }, { locale: 7 });    // ✗ compile error — Meta is { locale: string }
 ```
 
-Tools that don't need it just call `execute(input)`; `meta` is optional.
+Tools that don't annotate `meta` leave `Meta` at `unknown`; one that wants loose access can annotate `meta: any`. Tools that don't need it at all just call `execute(input)` — `meta` is optional either way.
 
 ## One tool, many consumers
 
@@ -428,7 +429,7 @@ standardTool(def): FormattableStandardTool<Input, Output>;          // reference
 tool.formatted(format?): FormattableStandardTool<Input, Output, F>; // opt into a consumer-specific result (or { error } envelope)
 ```
 
-`Input` and `Output` are your data types: what your `execute` accepts and returns. The optional schemas describe them. A neutral tool's `execute` validates both, returns the validated `Output`, and throws on a violation. It also takes an optional second `meta` argument — per-call runtime context forwarded verbatim to your handler, never validated and never in the JSON Schema (see [Per-call context](#per-call-context-meta)).
+`Input` and `Output` are your data types: what your `execute` accepts and returns. The optional schemas describe them. A neutral tool's `execute` validates both, returns the validated `Output`, and throws on a violation. It also takes an optional second `meta` argument — the `Meta` generic: per-call runtime context forwarded verbatim to your handler, never validated and never in the JSON Schema, and (when you annotate it) propagated to every caller (see [Per-call context](#per-call-context-meta)).
 
 | field | type | purpose |
 | --- | --- | --- |
@@ -437,8 +438,8 @@ tool.formatted(format?): FormattableStandardTool<Input, Output, F>; // opt into 
 | `inputSchema?` | `CombinedSpec<Input>` | optional input schema; validates and emits JSON Schema |
 | `outputSchema?` | `CombinedSpec<Output>` | optional output schema; validates and emits JSON Schema |
 | `description` | `string` | what the tool does |
-| `execute` (yours) | `(input: Input, meta?: unknown) => Output \| Promise<Output>` | your logic; receives validated input and the optional per-call `meta` (annotate it to type it), returns the output |
-| `execute` (tool) | `(input: Input, meta?: unknown) => Promise<Output>` | validate in, run yours (forwarding `meta`), validate out; returns the validated `Output`, throwing a `StandardToolValidationError` on a violation |
+| `execute` (yours) | `(input: Input, meta?: Meta) => Output \| Promise<Output>` | your logic; receives validated input and the optional per-call `meta` (annotate it to set `Meta`), returns the output |
+| `execute` (tool) | `(input: Input, meta?: Meta) => Promise<Output>` | validate in, run yours (forwarding `meta`), validate out; returns the validated `Output`, throwing a `StandardToolValidationError` on a violation |
 
 `inputSchema` and `outputSchema` are optional. When present they must implement both Standard Schema and Standard JSON Schema (Zod 4.2+, ArkType 2.1.28+, or Valibot 1.2+ via `@valibot/to-json-schema`). `Input` and `Output` are inferred from them, or from `execute` when a schema is omitted.
 
@@ -446,7 +447,7 @@ The reference `standardTool()` returns a `FormattableStandardTool` — the norma
 
 | member | type | purpose |
 | --- | --- | --- |
-| `executeRaw` | `(input: Input, meta?: unknown) => Output \| Promise<Output>` | the bare handler — runs your logic with **no** validation or formatting. Hand it to a framework that validates its own way (alongside `inputSchema`); formatting keeps it intact |
+| `executeRaw` | `(input: Input, meta?: Meta) => Output \| Promise<Output>` | the bare handler — runs your logic with **no** validation or formatting. Hand it to a framework that validates its own way (alongside `inputSchema`); formatting keeps it intact |
 | `formatted` | `(format?) => FormattableStandardTool<Input, Output, F>` | opt into a consumer-specific result; see [Formatting the result](#formatting-the-result) |
 
 The thrown `StandardToolValidationError` carries `target: 'input' \| 'output'` and the Standard Schema `issues`, so a formatter (or a `catch`) can build a rich result.
@@ -460,43 +461,46 @@ import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/sp
 
 type CombinedSpec<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
 
-/** Portable LLM tool. Neutral (`FormattedOutput = Output`): `execute` validates in & out, returns `Output`, and throws. */
-export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output> {
+/**
+ * Portable LLM tool. Neutral (`FormattedOutput = Output`): `execute` validates in & out, returns `Output`, and
+ * throws. `Meta` types the optional per-call context (defaults to `unknown`; annotate the handler to set it).
+ */
+export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> {
   name: string;
   title?: string;
   description: string;
   inputSchema?: CombinedSpec<Input>;
   outputSchema?: CombinedSpec<Output>;
-  execute(input: Input, meta?: unknown): FormattedOutput | Promise<FormattedOutput>;
+  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>;
 }
 
 /** A `StandardTool` that exposes the unvalidated `executeRaw` and can (re-)format its validated result. */
-export interface FormattableStandardTool<Input = unknown, Output = unknown, FormattedOutput = Output>
-  extends StandardTool<Input, Output, FormattedOutput> {
-  executeRaw(input: Input, meta?: unknown): Output | Promise<Output>;
+export interface FormattableStandardTool<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown>
+  extends StandardTool<Input, Output, FormattedOutput, Meta> {
+  executeRaw(input: Input, meta?: Meta): Output | Promise<Output>;
   formatted<F = Output | { error: string }>(
     format?: (result: Output | Error) => F | Promise<F>
-  ): FormattableStandardTool<Input, Output, F>;
+  ): FormattableStandardTool<Input, Output, F, Meta>;
 }
 
 /** Reference implementation: validate input → run the handler → validate output. The result is re-formattable. */
-export function standardTool<Input = unknown, Output = unknown>(
-  def: StandardTool<Input, Output>
-): FormattableStandardTool<Input, Output, Output> {
+export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
+  def: StandardTool<Input, Output, Output, Meta>
+): FormattableStandardTool<Input, Output, Output, Meta> {
   const { execute: executeRaw, ...rest } = def;
   // `executeRaw` is the bare handler (no validation); `execute` wraps it with input/output validation and throws.
-  const execute = async (input: Input, meta?: unknown): Promise<Output> => {
+  const execute = async (input: Input, meta?: Meta): Promise<Output> => {
     const value = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
     const output = await executeRaw(value, meta);
     return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
   };
-  const tool: FormattableStandardTool<Input, Output, Output> = {
+  const tool: FormattableStandardTool<Input, Output, Output, Meta> = {
     ...rest,
     execute,
     executeRaw,
     formatted<F = Output | { error: string }>(
       format?: (result: Output | Error) => F | Promise<F>
-    ): FormattableStandardTool<Input, Output, F> {
+    ): FormattableStandardTool<Input, Output, F, Meta> {
       // Default formatter: pass a success through, turn a thrown Error into `{ error }`.
       const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
         result: Output | Error
@@ -546,6 +550,30 @@ async function validate<S extends StandardSchemaV1>(
   return result.value;
 }
 ```
+
+## Beyond LLM tools
+
+"LLM tool" is the obvious use of this shape, but it's a projection of something more general: a **self-describing function** — a callable bundled with everything needed to understand it *without running it*: a stable `name`, a `description`, and typed `inputSchema`/`outputSchema` that both validate and emit JSON Schema. An LLM is one consumer that happens to need exactly that bundle. The same bundle drives others:
+
+- **prompt construction** — tell a model what it can call, in prose or JSON
+- **documentation** — `name` + `description` + schemas → reference docs
+- **UI / form generation** — `inputSchema` → a typed form
+- **command palettes / CLIs** — a tool is a described command with typed args
+- **RPC / endpoints** — `name` + in/out schema + `execute` is a procedure
+
+It generalizes for the same reason the schema layer does: the *description of a capability* is consumer-agnostic, so standardizing the bundle once lets one definition feed many consumers.
+
+That opens a use this hasn't had a clean shape for: **portable tools as ordinary library exports.** A library author can ship `StandardTool` values next to their normal API; a consumer imports them and `.formatted()`s for whatever model or framework — no server to host, no registry, no framework to adopt. (Contrast MCP, which is a protocol plus servers; this is a *type plus values*, distributed like code.)
+
+Auth and lifecycle stay where they already live — with the library, solved the way every API client already solves it. A tool that calls an authenticated API is produced by a factory the consumer constructs with its own credentials:
+
+```ts
+const tools = new ToolFactory({ apiKey });    // the author's own wrapper over standardTool(), not part of the spec
+await tools.findThings.execute({ id: 1234 }); // execute closes over the credentials
+console.log(tools.findThings.description);    // …and it's still fully self-describing
+```
+
+The spec defines only the *shape* of the result, not how it's built — so portability lives in the output type while construction stays idiomatic per library. And because describing a tool needs only its metadata (no auth, no execution), the docs and prompt uses above read `name`/`description`/schemas without ever calling `execute`.
 
 ## The landscape
 
@@ -727,8 +755,6 @@ The objections worth taking seriously:
 
 **Why not just extend an existing tool primitive?** Mastra's `createTool` and the AI SDK's `tool()` are the closest prior art. The catch ([above](#framework-and-sdk-tool-objects)) is that each is bundled inside a framework and returns a framework-coupled value: there's no `createTool` without `@mastra/core` (about 50 MB), no `defineTool` without a live `genkit()` instance, no `tool()` without `@langchain/core` or `ai`. The neutral, zero-dependency slot is empty. The nearest neutral thing is MCP's `Tool`, but that's a wire format with no in-process validation or `execute`. If the ecosystem would rather extend one framework's primitive instead, that's a fine outcome; this exists mainly to make the neutral option concrete enough to argue about.
 
-**`meta` is unparameterized.** Per-call context (`execute(input, meta)`) is `unknown`, not a typed generic, because tools are invoked by a model or runtime, not hand-called in typed code, so threading a `Meta` type param bought friction without much payoff. You annotate it on your handler where you read it; it's the one unparameterized corner of an otherwise typed surface.
-
 **`outputSchema` is rarely consumed.** Most provider APIs ignore output schemas; only MCP-style clients validate them. So today it earns its place through your own runtime safety and documentation, not the model.
 
 ## Scope: what this is not
@@ -741,7 +767,6 @@ The objections worth taking seriously:
 
 ## Open questions
 
-- Should `meta` be a typed `Meta` generic rather than `unknown`? Currently `unknown` — you annotate it on the handler — to keep the inference surface small.
 - Should the formatting layer live on the tool type at all? The normative `StandardTool` stays formatting-free; the separate `FormattableStandardTool` type adds `.formatted()` plus the carried `executeRaw`, so a neutral tool is a plain object and a formatted one can still be re-targeted. Whether that belongs on a tool type or in a fully separate utility is a judgment call.
 
 ## Links

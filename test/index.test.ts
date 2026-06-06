@@ -5,10 +5,11 @@ import { standardTool, StandardToolValidationError, type StandardTool } from '..
 
 // Compile-time type assertions (checked by `npm run typecheck`). expectType<T> accepts
 // only `true`, so a wrong type fails to compile. ExecOut<T> = the awaited execute() return;
-// RawOut<T> = the awaited executeRaw() return.
+// RawOut<T> = the awaited executeRaw() return; MetaParam<T> = execute()'s meta parameter type.
 type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type ExecOut<T extends { execute: (input: never) => unknown }> = Awaited<ReturnType<T['execute']>>;
 type RawOut<T extends { executeRaw: (input: never) => unknown }> = Awaited<ReturnType<T['executeRaw']>>;
+type MetaParam<T extends { execute: (input: never) => unknown }> = Parameters<T['execute']>[1];
 const expectType = <_Pass extends true>(): void => {};
 
 // Real Zod schemas (Zod 4.2+ implements both Standard Schema and Standard JSON Schema).
@@ -54,8 +55,8 @@ weatherStr satisfies StandardTool<{ city: string }, { tempC: number }, string>;
 const weatherAsync = weather.formatted(async (r) => ({ status: r instanceof Error ? r.message : 'ok' }));
 expectType<Equals<ExecOut<typeof weatherAsync>, { status: string }>>();
 
-// per-call meta, narrowed to `{ locale: string }` on the handler (`execute` is a method, so params are
-// bivariant); reading `meta.locale` compiles only because TS keeps that annotation instead of `unknown`.
+// per-call meta: annotating it on the handler sets the tool's 4th generic `Meta`, and that type then
+// propagates to every caller of execute()/executeRaw() (it was silently `unknown` at the call site before).
 const greet = standardTool({
   name: 'greet',
   description: 'greets a person in the caller-supplied locale',
@@ -63,6 +64,10 @@ const greet = standardTool({
   execute: ({ name }, meta: { locale: string }) => (meta.locale === 'fr' ? `bonjour ${name}` : `hi ${name}`),
 });
 expectType<Equals<ExecOut<typeof greet>, string>>();
+// Meta propagated from the handler annotation to the call site (optional param → `| undefined`).
+expectType<Equals<MetaParam<typeof greet>, { locale: string } | undefined>>();
+// A tool that ignores meta leaves Meta at its `unknown` default.
+expectType<Equals<MetaParam<typeof weather>, unknown>>();
 
 // The MCP text-only formatter recipe from the README, verified here.
 type McpToolResult = {

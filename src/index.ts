@@ -1,56 +1,55 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from './standard-schema.js';
 
-type CombinedSpec<T> = StandardSchemaV1<T> & StandardJSONSchemaV1<T>;
-
-/**
- * Portable LLM tool. Neutral (`FormattedOutput = Output`): `execute` validates in & out, returns `Output`, and
- * throws. `Meta` types the optional per-call context (defaults to `unknown`; annotate the handler to set it).
- */
+/** Portable LLM tool: `execute` validates in & out and throws; `formatted()` re-targets the result. */
 export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> {
   name: string;
   title?: string;
   description: string;
-  inputSchema?: CombinedSpec<Input>;
-  outputSchema?: CombinedSpec<Output>;
-  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>;
-}
-
-/** A `StandardTool` that exposes the unvalidated `executeRaw` and can (re-)format its validated result. */
-export interface FormattableStandardTool<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown>
-  extends StandardTool<Input, Output, FormattedOutput, Meta> {
-  executeRaw(input: Input, meta?: Meta): Output | Promise<Output>;
+  inputSchema?: StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>;
+  outputSchema?: StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>;
+  // `input` is optional only when no `inputSchema` fixes its type (`Input` stays `unknown`); a schema makes it required.
+  execute(
+    ...args: unknown extends Input ? [input?: Input, meta?: Meta] : [input: Input, meta?: Meta]
+  ): FormattedOutput | Promise<FormattedOutput>;
   formatted<F = Output | { error: string }>(
     format?: (result: Output | Error) => F | Promise<F>
-  ): FormattableStandardTool<Input, Output, F, Meta>;
+  ): StandardTool<Input, Output, F, Meta>;
 }
 
-/** Reference implementation: validate input → run the handler → validate output. The result is re-formattable. */
-export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
-  def: StandardTool<Input, Output, Output, Meta>
-): FormattableStandardTool<Input, Output, Output, Meta> {
-  const { execute: executeRaw, ...rest } = def;
-  // `executeRaw` is the bare handler (no validation); `execute` wraps it with input/output validation and throws.
-  const execute = async (input: Input, meta?: Meta): Promise<Output> => {
-    const value = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
-    const output = await executeRaw(value, meta);
+/** A tool minus the synthesized `formatted` — what you pass to `standardTool()`. */
+export type StandardToolDefinition<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> = Omit<
+  StandardTool<Input, Output, FormattedOutput, Meta>,
+  'formatted'
+>;
+
+export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(def: {
+  name: string;
+  title?: string;
+  description: string;
+  inputSchema?: StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>;
+  outputSchema?: StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>;
+  // plain, required `input` so TS infers `Input`/`Meta` from your handler and the handler never sees `undefined`
+  execute(input: Input, meta?: Meta): Output | Promise<Output>;
+}): StandardTool<Input, Output, Output, Meta> {
+  const { execute: handler, ...rest } = def;
+  const execute = async (input?: Input, meta?: Meta): Promise<Output> => {
+    const value = def.inputSchema ? await validate('input', def.inputSchema, input) : (input as Input);
+    const output = await handler(value, meta);
     return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
   };
-  const tool: FormattableStandardTool<Input, Output, Output, Meta> = {
+  const tool: StandardTool<Input, Output, Output, Meta> = {
     ...rest,
     execute,
-    executeRaw,
     formatted<F = Output | { error: string }>(
       format?: (result: Output | Error) => F | Promise<F>
-    ): FormattableStandardTool<Input, Output, F, Meta> {
-      // Default formatter: pass a success through, turn a thrown Error into `{ error }`.
+    ): StandardTool<Input, Output, F, Meta> {
       const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
         result: Output | Error
       ) => F | Promise<F>;
-      // Wrap the validated `execute`, never the previous formatting; `...tool` carries everything else
-      // (including this method and `executeRaw`), so the result stays re-formattable.
+      // re-derive from the validated execute, never the previous formatting, so formatting never stacks
       return {
         ...tool,
-        async execute(input, meta) {
+        execute: async (input?: Input, meta?: Meta): Promise<F> => {
           try {
             return fmt(await execute(input, meta));
           } catch (error) {
@@ -63,7 +62,7 @@ export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
   return tool;
 }
 
-/** Thrown when a tool's input or output fails validation; carries the side and the Standard Schema issues. */
+/** Thrown when input or output fails validation; carries the side and the Standard Schema issues. */
 export class StandardToolValidationError extends Error {
   readonly name = 'StandardToolValidationError';
   constructor(

@@ -145,7 +145,8 @@ writeFileSync(
   join(docs, 'index.html'),
   page({
     title: 'StandardTool',
-    description: 'One type for an LLM tool. Define it once, use it with any provider, SDK, or framework instead of rewriting the same object for each.',
+    description:
+      'One type for an LLM tool. Define it once, use it with any provider, SDK, or framework instead of rewriting the same object for each.',
     nav: gh + npm,
     bodyHtml: readmeHtml,
   })

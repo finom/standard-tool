@@ -3,7 +3,7 @@
 One type for an LLM tool. Define it once, use it with any provider, SDK, or framework instead of rewriting the same object for each.
 
 ```ts
-interface StandardTool<
+interface StandardToolV0<
   Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown,
 > {
   name: string;
@@ -14,7 +14,7 @@ interface StandardTool<
   execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>;
   formatted<F>(
     format?: (result: Output | Error) => F | Promise<F>,
-  ): StandardTool<Input, Output, F, Meta>;
+  ): StandardToolV0<Input, Output, F, Meta>;
 }
 ```
 
@@ -117,10 +117,10 @@ Examples use Zod; the model only ever sees emitted JSON Schema, so ArkType and V
 
 ```ts
 // tools.ts
-import { standardTool, type StandardTool } from 'standard-tool';
+import { standardTool, type StandardToolV0 } from 'standard-tool';
 import { z } from 'zod';
 
-export const tools: StandardTool[] = [
+export const tools: StandardToolV0[] = [
   standardTool({
     name: 'get_weather',
     description: 'Get the current temperature for a city.',
@@ -348,7 +348,7 @@ expect(await getWeather.formatted().execute({ city: 123 as never }))
 Describing a tool needs only its metadata, so the docs and prompt uses read `name`/`description`/schemas without ever calling `execute`.
 
 > [!NOTE]
-> That opens a use this hasn't had a clean shape for: **portable tools as ordinary library exports.** A library closes auth and config over each `StandardTool` and ships them as a client — `new OrdersClient(...)` gives you `client.getOrders`, a member that both runs and self-describes, so a model or framework picks it up with no extra wiring:
+> That opens a use this hasn't had a clean shape for: **portable tools as ordinary library exports.** A library closes auth and config over each `StandardToolV0` and ships them as a client — `new OrdersClient(...)` gives you `client.getOrders`, a member that both runs and self-describes, so a model or framework picks it up with no extra wiring:
 
 ```ts
 // in the library: members are StandardTools, auth closed over at construction
@@ -385,7 +385,7 @@ await getOrders({ userId: 'u_1' }); // call it directly
 await getOrders.tool.formatted().execute({ userId: 'u_1' }); // → to a model
 ```
 
-It ships like any other library code: a value your caller imports and runs. MCP, by contrast, is a protocol — you stand up a server to speak it. How you build the tool stays idiomatic per library (a class, a factory, a bare export); only the result is fixed — every member is a `StandardTool`.
+It ships like any other library code: a value your caller imports and runs. MCP, by contrast, is a protocol — you stand up a server to speak it. How you build the tool stays idiomatic per library (a class, a factory, a bare export); only the result is fixed — every member is a `StandardToolV0`.
 
 ## Copy-paste the source
 
@@ -395,7 +395,7 @@ Don't want `standard-tool` in your dependency list? Own the ~40 lines. Paste thi
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 
 /** Portable LLM tool: `execute` validates in & out and throws; `formatted()` re-targets the result. */
-export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> {
+export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> {
   name: string;
   title?: string;
   description: string;
@@ -407,12 +407,12 @@ export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput
   ): FormattedOutput | Promise<FormattedOutput>;
   formatted<F = Output | { error: string }>(
     format?: (result: Output | Error) => F | Promise<F>
-  ): StandardTool<Input, Output, F, Meta>;
+  ): StandardToolV0<Input, Output, F, Meta>;
 }
 
 /** A tool minus the synthesized `formatted` — what you pass to `standardTool()`. */
 export type StandardToolDefinition<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> = Omit<
-  StandardTool<Input, Output, FormattedOutput, Meta>,
+  StandardToolV0<Input, Output, FormattedOutput, Meta>,
   'formatted'
 >;
 
@@ -424,19 +424,19 @@ export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
   outputSchema?: StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>;
   // plain, required `input` so TS infers `Input`/`Meta` from your handler and the handler never sees `undefined`
   execute(input: Input, meta?: Meta): Output | Promise<Output>;
-}): StandardTool<Input, Output, Output, Meta> {
+}): StandardToolV0<Input, Output, Output, Meta> {
   const { execute: handler, ...rest } = def;
   const execute = async (input?: Input, meta?: Meta): Promise<Output> => {
     const value = def.inputSchema ? await validate('input', def.inputSchema, input) : (input as Input);
     const output = await handler(value, meta);
     return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
   };
-  const tool: StandardTool<Input, Output, Output, Meta> = {
+  const tool: StandardToolV0<Input, Output, Output, Meta> = {
     ...rest,
     execute,
     formatted<F = Output | { error: string }>(
       format?: (result: Output | Error) => F | Promise<F>
-    ): StandardTool<Input, Output, F, Meta> {
+    ): StandardToolV0<Input, Output, F, Meta> {
       const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
         result: Output | Error
       ) => F | Promise<F>;
@@ -487,16 +487,16 @@ async function validate<S extends StandardSchemaV1>(
 
 ## API
 
-`StandardTool` (top of this README) is the contract — program against the type. `standardTool()` is the reference builder that produces a conforming value; adapt another library's tool to the type and it works just as well.
+`StandardToolV0` (top of this README) is the contract — program against the type. `standardTool()` is the reference builder that produces a conforming value; adapt another library's tool to the type and it works just as well.
 
 ```ts
 import { standardTool } from 'standard-tool';
-import type { StandardTool, StandardToolDefinition } from 'standard-tool';
+import type { StandardToolV0, StandardToolDefinition } from 'standard-tool';
 
 // validates in & out, throws on a violation
-standardTool(def: StandardToolDefinition): StandardTool<Input, Output>;
+standardTool(def: StandardToolDefinition): StandardToolV0<Input, Output>;
 // opt into a consumer-specific result
-tool.formatted(format?): StandardTool<Input, Output, F>;
+tool.formatted(format?): StandardToolV0<Input, Output, F>;
 ```
 
 | field | type | purpose |
@@ -511,7 +511,7 @@ tool.formatted(format?): StandardTool<Input, Output, F>;
 
 `Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema`, `Input` stays `unknown` and `execute` is callable with no argument (`tool.execute()`); a schema makes the input required. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod 4.2+ and ArkType 2.1.28+ directly, Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+.
 
-You pass `standardTool()` a `StandardToolDefinition` (the fields above). It returns a `StandardTool`, which adds the synthesized `formatted()`. The thrown `StandardToolValidationError` carries `target: 'input' | 'output'` and the Standard Schema `issues`.
+You pass `standardTool()` a `StandardToolDefinition` (the fields above). It returns a `StandardToolV0`, which adds the synthesized `formatted()`. The thrown `StandardToolValidationError` carries `target: 'input' | 'output'` and the Standard Schema `issues`.
 
 ## How it compares
 

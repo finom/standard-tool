@@ -4,7 +4,7 @@ import { z } from 'zod';
 import {
   standardTool,
   StandardToolValidationError,
-  type StandardTool,
+  type StandardToolV0,
   type StandardToolDefinition,
 } from '../dist/index.js';
 
@@ -30,8 +30,8 @@ const weather = standardTool({
 });
 // Neutral form: FormattedOutput defaults to Output, so execute returns the raw Output (no envelope).
 expectType<Equals<ExecOut<typeof weather>, { tempC: number }>>();
-weather satisfies StandardTool<{ city: string }, { tempC: number }>;
-weather satisfies StandardTool<{ city: string }, { tempC: number }, { tempC: number }>;
+weather satisfies StandardToolV0<{ city: string }, { tempC: number }>;
+weather satisfies StandardToolV0<{ city: string }, { tempC: number }, { tempC: number }>;
 
 // No schemas → Input/Output inferred from execute; still neutral.
 const echo = standardTool({
@@ -40,10 +40,10 @@ const echo = standardTool({
   execute: (input: { x: number }) => ({ y: input.x + 1 }),
 });
 expectType<Equals<ExecOut<typeof echo>, { y: number }>>();
-echo satisfies StandardTool<{ x: number }, { y: number }>;
+echo satisfies StandardToolV0<{ x: number }, { y: number }>;
 
 // The shape you pass to standardTool() is a StandardToolDefinition (no formatted()); the builder upgrades it to a
-// StandardTool, which always has formatted(). A consumer only ever sees StandardTool — the authoring shape is producer-side.
+// StandardToolV0, which always has formatted(). A consumer only ever sees StandardToolV0 — the authoring shape is producer-side.
 const definition = {
   name: 'definition',
   description: 'the authoring shape — no formatted()',
@@ -51,21 +51,21 @@ const definition = {
 } satisfies StandardToolDefinition<{ x: number }, number>;
 const fromDefinition = standardTool(definition);
 expectType<Equals<ExecOut<typeof fromDefinition>, number>>();
-fromDefinition satisfies StandardTool<{ x: number }, number>;
-// @ts-expect-error a bare definition lacks formatted(), so a StandardToolDefinition is not itself a StandardTool
-const notATool: StandardTool<{ x: number }, number> = definition;
+fromDefinition satisfies StandardToolV0<{ x: number }, number>;
+// @ts-expect-error a bare definition lacks formatted(), so a StandardToolDefinition is not itself a StandardToolV0
+const notATool: StandardToolV0<{ x: number }, number> = definition;
 notATool satisfies StandardToolDefinition<{ x: number }, number>;
 
 // .formatted() with no formatter → the default { error } envelope.
 const weatherEnvelope = weather.formatted();
 expectType<Equals<ExecOut<typeof weatherEnvelope>, { tempC: number } | { error: string }>>();
-weatherEnvelope satisfies StandardTool<{ city: string }, { tempC: number }, { tempC: number } | { error: string }>;
+weatherEnvelope satisfies StandardToolV0<{ city: string }, { tempC: number }, { tempC: number } | { error: string }>;
 
 // .formatted(fmt) swaps only the 3rd generic; the underlying Output is unchanged.
 const toStr = (r: { tempC: number } | Error): string => (r instanceof Error ? `error: ${r.message}` : `ok: ${r.tempC}`);
 const weatherStr = weather.formatted(toStr);
 expectType<Equals<ExecOut<typeof weatherStr>, string>>();
-weatherStr satisfies StandardTool<{ city: string }, { tempC: number }, string>;
+weatherStr satisfies StandardToolV0<{ city: string }, { tempC: number }, string>;
 
 // async formatter is awaited.
 const weatherAsync = weather.formatted(async (r) => ({ status: r instanceof Error ? r.message : 'ok' }));
@@ -92,7 +92,7 @@ const now = standardTool({
   execute: () => ({ iso: '2026-01-01T00:00:00Z' }),
 });
 expectType<Equals<ExecOut<typeof now>, { iso: string }>>();
-now satisfies StandardTool<unknown, { iso: string }>;
+now satisfies StandardToolV0<unknown, { iso: string }>;
 expectType<[] extends Parameters<typeof now.execute> ? true : false>(); // callable with zero args
 expectType<Equals<[] extends Parameters<typeof weather.execute> ? true : false, false>>(); // schema'd tool still requires input
 
@@ -135,8 +135,8 @@ test('a built StandardTool exposes the neutral shape plus formatted', () => {
     'name',
     'outputSchema',
   ]);
-  // A built tool satisfies StandardTool — the normative fields plus the synthesized formatted().
-  weather satisfies StandardTool<{ city: string }, { tempC: number }>;
+  // A built tool satisfies StandardToolV0 — the normative fields plus the synthesized formatted().
+  weather satisfies StandardToolV0<{ city: string }, { tempC: number }>;
 });
 
 test('passes the optional title through (omitted, not set to undefined, when absent)', () => {
@@ -228,7 +228,7 @@ test('forwards the per-call meta argument verbatim to the handler', async () => 
 });
 
 test('default generics: bare StandardTool needs no type args and holds heterogeneous tools', () => {
-  const toolArray: StandardTool[] = [weather, echo, greet, weatherStr];
+  const toolArray: StandardToolV0[] = [weather, echo, greet, weatherStr];
   assert.equal(toolArray.length, 4);
 });
 

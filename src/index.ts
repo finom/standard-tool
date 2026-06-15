@@ -1,7 +1,7 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from './standard-schema.js';
 
 /** Portable LLM tool: `execute` validates in & out and throws; `formatted()` re-targets the result. */
-export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> {
+export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> {
   name: string;
   title?: string;
   description: string;
@@ -13,12 +13,12 @@ export interface StandardTool<Input = unknown, Output = unknown, FormattedOutput
   ): FormattedOutput | Promise<FormattedOutput>;
   formatted<F = Output | { error: string }>(
     format?: (result: Output | Error) => F | Promise<F>
-  ): StandardTool<Input, Output, F, Meta>;
+  ): StandardToolV0<Input, Output, F, Meta>;
 }
 
 /** A tool minus the synthesized `formatted` — what you pass to `standardTool()`. */
 export type StandardToolDefinition<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> = Omit<
-  StandardTool<Input, Output, FormattedOutput, Meta>,
+  StandardToolV0<Input, Output, FormattedOutput, Meta>,
   'formatted'
 >;
 
@@ -30,19 +30,19 @@ export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
   outputSchema?: StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>;
   // plain, required `input` so TS infers `Input`/`Meta` from your handler and the handler never sees `undefined`
   execute(input: Input, meta?: Meta): Output | Promise<Output>;
-}): StandardTool<Input, Output, Output, Meta> {
+}): StandardToolV0<Input, Output, Output, Meta> {
   const { execute: handler, ...rest } = def;
   const execute = async (input?: Input, meta?: Meta): Promise<Output> => {
     const value = def.inputSchema ? await validate('input', def.inputSchema, input) : (input as Input);
     const output = await handler(value, meta);
     return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
   };
-  const tool: StandardTool<Input, Output, Output, Meta> = {
+  const tool: StandardToolV0<Input, Output, Output, Meta> = {
     ...rest,
     execute,
     formatted<F = Output | { error: string }>(
       format?: (result: Output | Error) => F | Promise<F>
-    ): StandardTool<Input, Output, F, Meta> {
+    ): StandardToolV0<Input, Output, F, Meta> {
       const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
         result: Output | Error
       ) => F | Promise<F>;

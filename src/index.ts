@@ -65,8 +65,8 @@ export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
 }
 
 /** Thrown when input or output fails validation; carries the side and the Standard Schema issues. */
-export class StandardToolV0ValidationError extends Error {
-  readonly name = 'StandardToolV0ValidationError';
+export class StandardToolValidationError extends Error {
+  readonly name = 'StandardToolValidationError';
   constructor(
     readonly target: 'input' | 'output',
     readonly issues: readonly StandardSchemaV1.Issue[]
@@ -88,6 +88,6 @@ async function validate<S extends StandardSchemaV1>(
   value: unknown
 ): Promise<StandardSchemaV1.InferOutput<S>> {
   const result = await schema['~standard'].validate(value);
-  if (result.issues) throw new StandardToolV0ValidationError(target, result.issues);
+  if (result.issues) throw new StandardToolValidationError(target, result.issues);
   return result.value;
 }

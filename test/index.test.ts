@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { z } from 'zod';
 import {
   standardTool,
-  StandardToolV0ValidationError,
+  StandardToolValidationError,
   type StandardToolV0,
   type StandardToolV0Definition,
 } from '../dist/index.js';
@@ -158,11 +158,11 @@ test('exposes JSON Schema via Standard JSON Schema', () => {
   assert.deepEqual(json.required, ['city']);
 });
 
-test('neutral execute throws StandardToolV0ValidationError on invalid input', async () => {
+test('neutral execute throws StandardToolValidationError on invalid input', async () => {
   await assert.rejects(
     () => Promise.resolve(weather.execute({ city: 123 } as unknown as { city: string })),
     (err: unknown) => {
-      assert.ok(err instanceof StandardToolV0ValidationError);
+      assert.ok(err instanceof StandardToolValidationError);
       assert.equal(err.target, 'input');
       assert.match(err.message, /^input validation failed:/);
       assert.match(err.message, /city: /); // the failing field's path is inlined into the message
@@ -172,7 +172,7 @@ test('neutral execute throws StandardToolV0ValidationError on invalid input', as
   );
 });
 
-test('neutral execute throws StandardToolV0ValidationError on invalid output', async () => {
+test('neutral execute throws StandardToolValidationError on invalid output', async () => {
   const bad = standardTool({
     name: 'bad',
     description: 'wrong shape',
@@ -183,7 +183,7 @@ test('neutral execute throws StandardToolV0ValidationError on invalid output', a
   await assert.rejects(
     () => Promise.resolve(bad.execute({ city: 'Paris' })),
     (err: unknown) => {
-      assert.ok(err instanceof StandardToolV0ValidationError);
+      assert.ok(err instanceof StandardToolValidationError);
       assert.equal(err.target, 'output');
       return true;
     }
@@ -203,7 +203,7 @@ test('neutral execute rethrows what the handler threw (not wrapped)', async () =
   await assert.rejects(
     () => Promise.resolve(boom.execute({ city: 'Paris' })),
     (err: unknown) => {
-      assert.ok(err instanceof Error && !(err instanceof StandardToolV0ValidationError));
+      assert.ok(err instanceof Error && !(err instanceof StandardToolValidationError));
       assert.equal(err.message, 'kaboom');
       return true;
     }

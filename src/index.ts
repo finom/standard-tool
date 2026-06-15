@@ -17,10 +17,12 @@ export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutp
 }
 
 /** A tool minus the synthesized `formatted` — what you pass to `standardTool()`. */
-export type StandardToolDefinition<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> = Omit<
-  StandardToolV0<Input, Output, FormattedOutput, Meta>,
-  'formatted'
->;
+export type StandardToolV0Definition<
+  Input = unknown,
+  Output = unknown,
+  FormattedOutput = Output,
+  Meta = unknown,
+> = Omit<StandardToolV0<Input, Output, FormattedOutput, Meta>, 'formatted'>;
 
 export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(def: {
   name: string;
@@ -63,8 +65,8 @@ export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
 }
 
 /** Thrown when input or output fails validation; carries the side and the Standard Schema issues. */
-export class StandardToolValidationError extends Error {
-  readonly name = 'StandardToolValidationError';
+export class StandardToolV0ValidationError extends Error {
+  readonly name = 'StandardToolV0ValidationError';
   constructor(
     readonly target: 'input' | 'output',
     readonly issues: readonly StandardSchemaV1.Issue[]
@@ -86,6 +88,6 @@ async function validate<S extends StandardSchemaV1>(
   value: unknown
 ): Promise<StandardSchemaV1.InferOutput<S>> {
   const result = await schema['~standard'].validate(value);
-  if (result.issues) throw new StandardToolValidationError(target, result.issues);
+  if (result.issues) throw new StandardToolV0ValidationError(target, result.issues);
   return result.value;
 }

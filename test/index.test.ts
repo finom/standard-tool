@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { z } from 'zod';
 import {
   standardTool,
-  StandardToolValidationError,
+  StandardToolV0ValidationError,
   type StandardToolV0,
-  type StandardToolDefinition,
+  type StandardToolV0Definition,
 } from '../dist/index.js';
 
 // Compile-time type assertions (checked by `npm run typecheck`). expectType<T> accepts
@@ -42,19 +42,19 @@ const echo = standardTool({
 expectType<Equals<ExecOut<typeof echo>, { y: number }>>();
 echo satisfies StandardToolV0<{ x: number }, { y: number }>;
 
-// The shape you pass to standardTool() is a StandardToolDefinition (no formatted()); the builder upgrades it to a
+// The shape you pass to standardTool() is a StandardToolV0Definition (no formatted()); the builder upgrades it to a
 // StandardToolV0, which always has formatted(). A consumer only ever sees StandardToolV0 — the authoring shape is producer-side.
 const definition = {
   name: 'definition',
   description: 'the authoring shape — no formatted()',
   execute: (i: { x: number }) => i.x,
-} satisfies StandardToolDefinition<{ x: number }, number>;
+} satisfies StandardToolV0Definition<{ x: number }, number>;
 const fromDefinition = standardTool(definition);
 expectType<Equals<ExecOut<typeof fromDefinition>, number>>();
 fromDefinition satisfies StandardToolV0<{ x: number }, number>;
-// @ts-expect-error a bare definition lacks formatted(), so a StandardToolDefinition is not itself a StandardToolV0
+// @ts-expect-error a bare definition lacks formatted(), so a StandardToolV0Definition is not itself a StandardToolV0
 const notATool: StandardToolV0<{ x: number }, number> = definition;
-notATool satisfies StandardToolDefinition<{ x: number }, number>;
+notATool satisfies StandardToolV0Definition<{ x: number }, number>;
 
 // .formatted() with no formatter → the default { error } envelope.
 const weatherEnvelope = weather.formatted();
@@ -158,11 +158,11 @@ test('exposes JSON Schema via Standard JSON Schema', () => {
   assert.deepEqual(json.required, ['city']);
 });
 
-test('neutral execute throws StandardToolValidationError on invalid input', async () => {
+test('neutral execute throws StandardToolV0ValidationError on invalid input', async () => {
   await assert.rejects(
     () => Promise.resolve(weather.execute({ city: 123 } as unknown as { city: string })),
     (err: unknown) => {
-      assert.ok(err instanceof StandardToolValidationError);
+      assert.ok(err instanceof StandardToolV0ValidationError);
       assert.equal(err.target, 'input');
       assert.match(err.message, /^input validation failed:/);
       assert.match(err.message, /city: /); // the failing field's path is inlined into the message
@@ -172,7 +172,7 @@ test('neutral execute throws StandardToolValidationError on invalid input', asyn
   );
 });
 
-test('neutral execute throws StandardToolValidationError on invalid output', async () => {
+test('neutral execute throws StandardToolV0ValidationError on invalid output', async () => {
   const bad = standardTool({
     name: 'bad',
     description: 'wrong shape',
@@ -183,7 +183,7 @@ test('neutral execute throws StandardToolValidationError on invalid output', asy
   await assert.rejects(
     () => Promise.resolve(bad.execute({ city: 'Paris' })),
     (err: unknown) => {
-      assert.ok(err instanceof StandardToolValidationError);
+      assert.ok(err instanceof StandardToolV0ValidationError);
       assert.equal(err.target, 'output');
       return true;
     }
@@ -203,7 +203,7 @@ test('neutral execute rethrows what the handler threw (not wrapped)', async () =
   await assert.rejects(
     () => Promise.resolve(boom.execute({ city: 'Paris' })),
     (err: unknown) => {
-      assert.ok(err instanceof Error && !(err instanceof StandardToolValidationError));
+      assert.ok(err instanceof Error && !(err instanceof StandardToolV0ValidationError));
       assert.equal(err.message, 'kaboom');
       return true;
     }

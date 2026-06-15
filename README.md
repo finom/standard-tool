@@ -52,7 +52,7 @@ const parameters = getWeather.inputSchema?.['~standard'].jsonSchema
   .input({ target: 'draft-2020-12' }) ?? { type: 'object', properties: {} };
 ```
 
-`standardTool()` is the reference builder: it validates input and output and throws `StandardToolValidationError` on a mismatch. The package adds no runtime dependencies of its own — the Standard Schema interfaces are vendored in — though you still install a schema library for the schemas. Prefer not to depend on the package at all? [Copy-paste the ~40-line source.](#copy-paste-the-source)
+`standardTool()` is the reference builder: it validates input and output and throws `StandardToolV0ValidationError` on a mismatch. The package adds no runtime dependencies of its own — the Standard Schema interfaces are vendored in — though you still install a schema library for the schemas. Prefer not to depend on the package at all? [Copy-paste the ~40-line source.](#copy-paste-the-source)
 
 ## Why
 
@@ -67,13 +67,13 @@ So the work is backwards. Frameworks keep reinventing the trivial envelope and b
 A plain tool returns its `Output` and throws on failure. That's right for typed code, but inside a model loop you usually want a failure to come back as *data* the model can correct from, and some consumers (MCP) want a specific result envelope. `formatted()` opts into that without touching `Input` or `Output`:
 
 ```ts
-// throws StandardToolValidationError
+// throws StandardToolV0ValidationError
 await getWeather.execute({ city: 123 } as never);
 // returns { error: 'input validation failed: …' }
 await getWeather.formatted().execute({ city: 123 } as never);
 ```
 
-`formatted` takes any `(result: Output | Error) => FormattedOutput`. It gets the validated `Output` on success and an `Error` on failure (a `StandardToolValidationError` carrying `target` and the Standard Schema `issues`). With no argument it uses the default `{ error }` envelope. The return type becomes the third generic:
+`formatted` takes any `(result: Output | Error) => FormattedOutput`. It gets the validated `Output` on success and an `Error` on failure (a `StandardToolV0ValidationError` carrying `target` and the Standard Schema `issues`). With no argument it uses the default `{ error }` envelope. The return type becomes the third generic:
 
 ```ts
 const asText = getWeather.formatted((r) =>
@@ -411,7 +411,7 @@ export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutp
 }
 
 /** A tool minus the synthesized `formatted` — what you pass to `standardTool()`. */
-export type StandardToolDefinition<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> = Omit<
+export type StandardToolV0Definition<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> = Omit<
   StandardToolV0<Input, Output, FormattedOutput, Meta>,
   'formatted'
 >;
@@ -457,8 +457,8 @@ export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
 }
 
 /** Thrown when input or output fails validation; carries the side and the Standard Schema issues. */
-export class StandardToolValidationError extends Error {
-  readonly name = 'StandardToolValidationError';
+export class StandardToolV0ValidationError extends Error {
+  readonly name = 'StandardToolV0ValidationError';
   constructor(
     readonly target: 'input' | 'output',
     readonly issues: readonly StandardSchemaV1.Issue[]
@@ -480,7 +480,7 @@ async function validate<S extends StandardSchemaV1>(
   value: unknown
 ): Promise<StandardSchemaV1.InferOutput<S>> {
   const result = await schema['~standard'].validate(value);
-  if (result.issues) throw new StandardToolValidationError(target, result.issues);
+  if (result.issues) throw new StandardToolV0ValidationError(target, result.issues);
   return result.value;
 }
 ```
@@ -491,10 +491,10 @@ async function validate<S extends StandardSchemaV1>(
 
 ```ts
 import { standardTool } from 'standard-tool';
-import type { StandardToolV0, StandardToolDefinition } from 'standard-tool';
+import type { StandardToolV0, StandardToolV0Definition } from 'standard-tool';
 
 // validates in & out, throws on a violation
-standardTool(def: StandardToolDefinition): StandardToolV0<Input, Output>;
+standardTool(def: StandardToolV0Definition): StandardToolV0<Input, Output>;
 // opt into a consumer-specific result
 tool.formatted(format?): StandardToolV0<Input, Output, F>;
 ```
@@ -507,11 +507,11 @@ tool.formatted(format?): StandardToolV0<Input, Output, F>;
 | `inputSchema?` | `StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>` | validates and emits JSON Schema |
 | `outputSchema?` | `StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>` | validates and emits JSON Schema |
 | `execute` (yours) | `(input: Input, meta?: Meta) => Output \| Promise<Output>` | your logic; gets validated input and the optional `meta` |
-| `execute` (built) | `(input: Input, meta?: Meta) => Promise<Output>` | validates in, runs yours, validates out; throws `StandardToolValidationError` |
+| `execute` (built) | `(input: Input, meta?: Meta) => Promise<Output>` | validates in, runs yours, validates out; throws `StandardToolV0ValidationError` |
 
 `Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema`, `Input` stays `unknown` and `execute` is callable with no argument (`tool.execute()`); a schema makes the input required. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod 4.2+ and ArkType 2.1.28+ directly, Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+.
 
-You pass `standardTool()` a `StandardToolDefinition` (the fields above). It returns a `StandardToolV0`, which adds the synthesized `formatted()`. The thrown `StandardToolValidationError` carries `target: 'input' | 'output'` and the Standard Schema `issues`.
+You pass `standardTool()` a `StandardToolV0Definition` (the fields above). It returns a `StandardToolV0`, which adds the synthesized `formatted()`. The thrown `StandardToolV0ValidationError` carries `target: 'input' | 'output'` and the Standard Schema `issues`.
 
 ## How it compares
 

@@ -1,7 +1,7 @@
 {
   "name": "standard-tool",
   "version": "0.0.6",
-  "description": "Standard DRY LLM Tool Interface — name/description/execute with input & output validated via Standard Schema and emitted as JSON Schema via Standard JSON Schema. Zero dependencies.",
+  "description": "One type for an LLM tool — define it once, use it with any provider, SDK, or framework. Input & output validated via Standard Schema and emitted as JSON Schema. Zero dependencies.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -43,6 +43,9 @@
   ],
   "author": "Andrey Gubanov",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/finom/standard-tool.git"

@@ -24,7 +24,7 @@ interface StandardToolV0<
 }
 ```
 
-That's all of it. It's an **interface, not a library you depend on**: any object of this shape is a StandardTool, so you can conform with a plain object and zero dependencies, the same way Zod, Valibot, and ArkType conform to Standard Schema. Producing a tool takes an object literal; consuming one takes a `try`/`catch` — `execute` throws on failure, and a bare catch turns that into data for the model. The npm package is a reference implementation — nothing makes you use it.
+That's all of it. The shape is a **self-describing function** — not just the callable, but its name, description, and schemas in one value. It's an **interface, not a library you depend on**: any object of this shape is a StandardTool, so you can conform with a plain object and zero dependencies, the same way Zod, Valibot, and ArkType conform to Standard Schema. Producing a tool takes an object literal; consuming one takes a `try`/`catch` — `execute` throws on failure, and a bare catch turns that into data for the model. The npm package is a reference implementation — nothing makes you use it.
 
 The schemas pull double duty: they validate runtime data (a model's arguments are untrusted) and emit JSON Schema for the model via `inputSchema['~standard'].jsonSchema.input({ target })` — `~standard` is the property Standard Schema reserves for its interface; your schema library defines it, never you. Any library implementing both [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema) works: Zod 4.2+ and ArkType 2.1.28+ expose it on the schema directly; Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+.
 
@@ -379,7 +379,7 @@ expect(await withFormattedOutput(getWeather).execute({ city: 123 as never }))
 
 ## Beyond LLM tools
 
-"LLM tool" is the obvious use, but the shape is really a **self-describing function**: a callable bundled with everything needed to understand it without running it: a stable `name`, a `description`, and typed `inputSchema`/`outputSchema` that both validate and emit JSON Schema. A model is one consumer that happens to need exactly that bundle. The same bundle drives others:
+"LLM tool" is the obvious use, but a **self-describing function** is a callable bundled with everything needed to understand it without running it: a stable `name`, a `description`, and typed `inputSchema`/`outputSchema` that both validate and emit JSON Schema. A model is one consumer that happens to need exactly that bundle. The same bundle drives others:
 
 - **prompt construction** — tell a model what it can call
 - **documentation** — `name` + `description` + schemas → reference docs

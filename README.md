@@ -1,7 +1,7 @@
 <!-- hero-start -->
 <p align="center"><img src="docs/logo.svg" width="84" height="84" alt="StandardTool logo"></p>
 <h1 align="center">StandardTool</h1>
-<p align="center">One type for an LLM tool. Define it once, use it with any provider, SDK, or framework instead of rewriting the same object for each.</p>
+<p align="center">One type for an LLM tool.<br>Define it once, use it with any provider, SDK, or framework.</p>
 <p align="center"><a href="https://standard-tool.js.org">standard-tool.js.org</a></p>
 <p align="center">
   <a href="https://github.com/finom/standard-tool/actions/workflows/ci.yml"><img src="https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg" alt="CI"></a>

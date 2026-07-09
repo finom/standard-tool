@@ -389,8 +389,7 @@ expect(await withFormattedOutput(getWeather).execute({ city: 123 as never }))
 
 Describing a tool needs only its metadata, so the docs and prompt uses read `name`/`description`/schemas without ever calling `execute`.
 
-> [!NOTE]
-> That opens a use this hasn't had a clean shape for: **portable tools as ordinary library exports.** A library closes auth and config over each `StandardToolV0` and ships them as a client — `new OrdersClient(...)` gives you `client.getOrders`, a member that both runs and self-describes, so a model or framework picks it up with no extra wiring:
+That opens a use this hasn't had a clean shape for: **portable tools as ordinary library exports.** A library closes auth and config over each `StandardToolV0` and ships them as a client — `new OrdersClient(...)` gives you `client.getOrders`, a member that both runs and self-describes, so a model or framework picks it up with no extra wiring:
 
 ```ts
 // in the library: members are StandardTools, auth closed over at construction

@@ -445,7 +445,7 @@ export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutp
   execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>;
 }
 
-/** Takes a tool whose `execute` is the raw handler; returns one whose `execute` validates in & out. */
+/** Wraps a raw handler so `execute` validates input and output. */
 export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
   def: StandardToolV0<Input, Output, Output, Meta>
 ): StandardToolV0<Input, Output, Output, Meta> {
@@ -459,11 +459,7 @@ export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
   };
 }
 
-/**
- * Wrap a neutral tool so failures come back as data instead of throws.
- * Apply once, at the consumer's boundary. The formatter runs exactly once; what it throws propagates unformatted.
- * Let `format` infer `FormattedOutput`; naming it explicitly without a matching `format` mistypes the result.
- */
+/** Wrap a neutral tool so failures return as data, not throws. Apply once, at the consumer boundary. */
 export function withFormattedOutput<Input, Output, FormattedOutput = Output | { error: string }, Meta = unknown>(
   tool: StandardToolV0<Input, Output, NoInfer<Output>, Meta>,
   format?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>
@@ -485,7 +481,6 @@ export function withFormattedOutput<Input, Output, FormattedOutput = Output | { 
   };
 }
 
-/** Thrown when input or output fails validation; carries the side and the Standard Schema issues. */
 export class StandardToolValidationError extends Error {
   readonly name = 'StandardToolValidationError';
   constructor(

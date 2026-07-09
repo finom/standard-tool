@@ -27,8 +27,7 @@ export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
 /**
  * Wrap a neutral tool so failures come back as data instead of throws.
  * Apply once, at the consumer's boundary. The formatter runs exactly once; what it throws propagates unformatted.
- * `FormattedOutput` is meant to be inferred from `format`; naming it explicitly while omitting `format`
- * declares a result type the default envelope won't produce.
+ * Let `format` infer `FormattedOutput`; naming it explicitly without a matching `format` mistypes the result.
  */
 export function withFormattedOutput<Input, Output, FormattedOutput = Output | { error: string }, Meta = unknown>(
   tool: StandardToolV0<Input, Output, NoInfer<Output>, Meta>,

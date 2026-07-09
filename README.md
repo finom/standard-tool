@@ -24,7 +24,7 @@ interface StandardToolV0<
 }
 ```
 
-That's all of it. The shape is a **self-describing function** — not just the callable, but its name, description, and schemas in one value. It's an **interface, not a library you depend on**: any object of this shape is a StandardTool, so you can conform with a plain object and zero dependencies, the same way Zod, Valibot, and ArkType conform to Standard Schema. Producing a tool takes an object literal; consuming one takes a `try`/`catch` — `execute` throws on failure, and a bare catch turns that into data for the model. The npm package is a reference implementation — nothing makes you use it.
+That's all of it. The shape is a **self-describing function**: the callable plus its name, description, and schemas in one value. It's an **interface, not a library you depend on**: any object of this shape is a StandardTool, so you can conform with a plain object and zero dependencies, the same way Zod, Valibot, and ArkType conform to Standard Schema. Producing a tool takes an object literal; consuming one takes a `try`/`catch` — `execute` throws on failure, and a bare catch turns that into data for the model. The npm package is a reference implementation.
 
 The schemas pull double duty: they validate runtime data (a model's arguments are untrusted) and emit JSON Schema for the model via `inputSchema['~standard'].jsonSchema.input({ target })` — `~standard` is the property Standard Schema reserves for its interface; your schema library defines it, never you. Any library implementing both [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema) works: Zod 4.2+ and ArkType 2.1.28+ expose it on the schema directly; Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+.
 
@@ -32,11 +32,11 @@ The schemas pull double duty: they validate runtime data (a model's arguments ar
 
 ## Why
 
-Every LLM ecosystem ships its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain. Strip any of them and the same five parts fall out — **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute; call it **DIONE** — plus a little display metadata. Universal in substance, spelled differently by every framework, portable in none.
+Every LLM ecosystem ships its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain. Strip any of them and the same five parts fall out — **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute; call it **DIONE** — plus a little display metadata. A tool written for one framework is not portable to the others.
 
 The hard part of that list is already solved. [Standard Schema](https://standardschema.dev) unified validation; [Standard JSON Schema](https://standardschema.dev/json-schema) unified JSON Schema emission. Once the schemas cover both jobs, everything left in a tool is two strings and a function.
 
-So the work is backwards. Frameworks keep reinventing the trivial envelope and binding it to their runtime, while the one shared piece gets treated as proprietary. Standard Tool standardizes the envelope too: a ten-line interface, no runtime, no lock-in. [The full survey is below.](#how-it-compares)
+Frameworks keep reinventing the trivial envelope and binding it to their runtime, while the one shared piece gets treated as proprietary. Standard Tool standardizes the envelope too: a ten-line interface, no runtime, no lock-in. [The full survey is below.](#how-it-compares)
 
 ## Writing a tool
 
@@ -82,7 +82,7 @@ const getWeather = standardTool({
 await getWeather.execute({ city: 'Paris' });
 ```
 
-Prefer not to depend on the package at all? [Copy-paste the ~80-line source.](#copy-paste-the-source)
+To avoid the dependency entirely, [copy-paste the ~80-line source](#copy-paste-the-source).
 
 ## Formatting the result
 
@@ -431,7 +431,7 @@ It ships like any other library code: a value your caller imports and runs. MCP,
 
 ## Copy-paste the source
 
-Don't want `standard-tool` in your dependency list? Own the ~80 lines. Paste this and pull the spec types from the types-only [`@standard-schema/spec`](https://github.com/standard-schema/standard-schema) (`npm i -D @standard-schema/spec`) — same logic as the published package, with the vendored interfaces swapped for that import. (You still bring a Standard Schema library for the schemas themselves, exactly as with the package.)
+The helpers below are ~80 lines and can be vendored instead of installing `standard-tool`. Paste this and pull the spec types from the types-only [`@standard-schema/spec`](https://github.com/standard-schema/standard-schema) (`npm i -D @standard-schema/spec`) — same logic as the published package, with the vendored interfaces swapped for that import. (You still bring a Standard Schema library for the schemas themselves, exactly as with the package.)
 
 ```ts
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
@@ -566,7 +566,7 @@ The two schemas carry all the complexity, because each serves two masters: emit 
 
 **The wire formats have converged on JSON-Schema parameters but disagree on the wrapper and dialect.** OpenAI uses `parameters` (with a `strict` mode that constrains the schema); Anthropic uses `input_schema`; MCP uses `inputSchema` plus `outputSchema`; Gemini uses `functionDeclarations` and accepts only an OpenAPI-3.0 subset. Same data, four shapes.
 
-**The framework objects are where it gets worse.** Each invents its own object and welds it to its own runtime:
+**The framework objects diverge further.** Each invents its own object and welds it to its own runtime:
 
 | Ecosystem | params key | output schema | execute | schema source | standalone? |
 | --- | --- | --- | --- | --- | --- |
@@ -580,11 +580,11 @@ The two schemas carry all the complexity, because each serves two masters: emit 
 
 The columns are nearly identical; the objects are mutually incompatible, and none is obtainable on its own. There's no `createTool` without `@mastra/core`, no `defineTool` without a live `genkit()` instance, no `tool()` without `ai` or `@langchain/core`. So "just reuse framework X's tool" means adopting framework X. The neutral, zero-dependency slot is empty. (Mastra already builds its schemas on Standard JSON Schema, so the foundation is shared; only the envelope isn't.)
 
-**The schema layer, by contrast, is solved.** [Standard Schema](https://standardschema.dev) is a ~60-line interface co-designed by the authors of Zod, Valibot, and ArkType, already consumed by tRPC and TanStack; it unifies validation. [Standard JSON Schema](https://standardschema.dev/json-schema) adds emission, with the dialect selectable per call (`target` spans multiple JSON Schema standards) and zero runtime dependencies. Validation and emission are both handled and dependency-free to consume. The envelope is the easy part, and it's the part that's still missing. That inversion is what Standard Tool answers.
+**The schema layer, by contrast, is solved.** [Standard Schema](https://standardschema.dev) is a ~60-line interface co-designed by the authors of Zod, Valibot, and ArkType, already consumed by tRPC and TanStack; it unifies validation. [Standard JSON Schema](https://standardschema.dev/json-schema) adds emission, with the dialect selectable per call (`target` spans multiple JSON Schema standards) and zero runtime dependencies. The envelope is the easy part, and it's the part that's still missing.
 
 ## The case against
 
-- **Adoption** ([XKCD 927](https://xkcd.com/927/)). A shape nobody else produces or consumes is just a tidy wrapper for its author, and that's roughly where this sits today. The bet: the shape is obvious enough to make adapters trivial, and Standard Schema showed consumers adopt a neutral interface without a mandate — though it launched co-signed by the incumbent authors of Zod, Valibot, and ArkType, an advantage this proposal doesn't have yet. There's no runtime and no lock-in, so the surface to "win" is small, but it's still one more shape on the pile until others pick it up. This is the honest weak point.
+- **Adoption** ([XKCD 927](https://xkcd.com/927/)). A shape nobody else produces or consumes is just a tidy wrapper for its author, and that's roughly where this sits today. The bet: the shape is obvious enough to make adapters trivial, and Standard Schema showed consumers adopt a neutral interface without a mandate — though it launched co-signed by the incumbent authors of Zod, Valibot, and ArkType, an advantage this proposal doesn't have yet. There's no runtime and no lock-in, so the surface to "win" is small, but it's still one more shape on the pile until others pick it up. This is the strongest objection.
 - **Why not extend an existing primitive?** Mastra's `createTool` and the AI SDK's `tool()` are the closest prior art, but each is bundled inside a framework and returns a framework-coupled value. The neutral slot is empty; this exists to make it concrete enough to argue about.
 - **`outputSchema` is rarely consumed.** Most provider APIs ignore output schemas; only MCP-style clients validate them. Today it earns its place through your own runtime safety and docs, not the model.
 

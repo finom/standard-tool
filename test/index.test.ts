@@ -52,7 +52,7 @@ weatherStr satisfies StandardToolV0<{ city: string }, { tempC: number }, string>
 const weatherAsync = withFormattedOutput(weather, async (r) => ({ status: r instanceof Error ? r.message : 'ok' }));
 expectType<Equals<ExecOut<typeof weatherAsync>, { status: string }>>();
 
-// Only neutral tools (FormattedOutput = Output) are accepted: formatting an already-formatted tool is a type error.
+// Neutral tools (FormattedOutput = Output) are asked for: re-formatting is a type error when the formatter names Output.
 // @ts-expect-error weatherStr's execute returns string, not its Output { tempC: number }
 withFormattedOutput(weatherStr, toStr);
 

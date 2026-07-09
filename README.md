@@ -20,19 +20,19 @@ interface StandardToolV0<
   description: string;
   inputSchema?: StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>;
   outputSchema?: StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>;
-  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>;
+  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>; // FormattedOutput defaults to Output
 }
 ```
 
-That's all of it. It's an **interface, not a library you depend on**: any object of this shape is a StandardTool, so you can conform with a plain object and zero dependencies, the same way Zod, Valibot, and ArkType conform to Standard Schema. Producing a tool takes an object literal; consuming one takes a `try`/`catch`. The npm package is a reference implementation — nothing makes you use it.
+That's all of it. It's an **interface, not a library you depend on**: any object of this shape is a StandardTool, so you can conform with a plain object and zero dependencies, the same way Zod, Valibot, and ArkType conform to Standard Schema. Producing a tool takes an object literal; consuming one takes a `try`/`catch` — `execute` throws on failure, and a bare catch turns that into data for the model. The npm package is a reference implementation — nothing makes you use it.
 
-The schemas pull double duty: they validate runtime data (a model's arguments are untrusted) and emit JSON Schema for the model via `inputSchema['~standard'].jsonSchema.input({ target })`. Any library implementing both [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema) works: Zod 4.2+ and ArkType 2.1.28+ expose it on the schema directly; Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+.
+The schemas pull double duty: they validate runtime data (a model's arguments are untrusted) and emit JSON Schema for the model via `inputSchema['~standard'].jsonSchema.input({ target })` — `~standard` is the property Standard Schema reserves for its interface; your schema library defines it, never you. Any library implementing both [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema) works: Zod 4.2+ and ArkType 2.1.28+ expose it on the schema directly; Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+.
 
-> **Status: RFC.** `V0` versions the interface, the way `StandardSchemaV1` versions Standard Schema — the shape is settled; a breaking change to it would be `StandardToolV1`. The reference package follows its own `0.x` semver and may still change helper names and the formatting layer. [Critiques and counter-proposals welcome.](https://github.com/finom/standard-tool/issues)
+> **Status: RFC.** `V0` versions the interface, the way `StandardSchemaV1` versions Standard Schema — the shape is frozen for `V0`; a breaking change to it would be `StandardToolV1`. The reference package follows its own `0.x` semver and may still change helper names and the formatting layer. [Critiques and counter-proposals welcome.](https://github.com/finom/standard-tool/issues)
 
 ## Why
 
-Every LLM ecosystem ships its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain, oRPC, Effect. Strip any of them and the same five parts fall out — **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute; call it **DIONE** — plus a little display metadata. Universal in substance, spelled differently by every framework, portable in none.
+Every LLM ecosystem ships its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain. Strip any of them and the same five parts fall out — **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute; call it **DIONE** — plus a little display metadata. Universal in substance, spelled differently by every framework, portable in none.
 
 The hard part of that list is already solved. [Standard Schema](https://standardschema.dev) unified validation; [Standard JSON Schema](https://standardschema.dev/json-schema) unified JSON Schema emission. Once the schemas cover both jobs, everything left in a tool is two strings and a function.
 
@@ -82,7 +82,7 @@ const getWeather = standardTool({
 await getWeather.execute({ city: 'Paris' });
 ```
 
-Prefer not to depend on the package at all? [Copy-paste the ~90-line source.](#copy-paste-the-source)
+Prefer not to depend on the package at all? [Copy-paste the ~80-line source.](#copy-paste-the-source)
 
 ## Formatting the result
 
@@ -103,7 +103,7 @@ await getWeather.execute({ city: 123 } as never);
 await withFormattedOutput(getWeather).execute({ city: 123 } as never);
 ```
 
-It takes any `(result: Output | Error) => FormattedOutput`. The formatter gets the validated `Output` on success and an `Error` on failure (a `StandardToolValidationError` carrying `target` and the Standard Schema `issues`); with no formatter it uses the default `{ error }` envelope. The formatter runs exactly once per call, and what *it* throws propagates unformatted — so it can rethrow errors that belong to the app rather than the model. The formatter's return type becomes the third generic:
+It takes any `(result: Output | Error) => FormattedOutput`. The formatter gets the validated `Output` on success and an `Error` on failure (a `StandardToolValidationError` carrying `target` and the Standard Schema `issues`); with no formatter it uses the default `{ error }` envelope. The formatter runs exactly once per call, and what *it* throws propagates unformatted — so it can rethrow errors that belong to the app rather than the model. The formatter's return type becomes `FormattedOutput` (the third generic):
 
 ```ts
 const asText = withFormattedOutput(getWeather, (r) =>
@@ -112,7 +112,7 @@ const asText = withFormattedOutput(getWeather, (r) =>
 await asText.execute({ city: 'Paris' }); // '21°C'
 ```
 
-Formatting is the **consumer's last step, applied once at its own boundary**: ship and share tools neutral (`FormattedOutput = Output`), and let each consumer re-target the same tool for itself. `withFormattedOutput` accepts only neutral tools, so formatting an already-formatted tool is a type error rather than a stacked envelope.
+Formatting is the **consumer's last step, applied once at its own boundary**: a tool is **neutral** when `FormattedOutput = Output`. Ship and share tools neutral, and let each consumer re-target the same tool for itself. `withFormattedOutput` asks for a neutral tool: re-formatting is a type error when the formatter names `Output` (as the MCP example's `toMcpResult` does), though a bare re-wrap with the default formatter can still compile — apply-once is a norm the types back, not fully enforce.
 
 Frameworks that ship their own formatting hook — `toModelOutput` in the [AI SDK](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool), [Mastra](https://mastra.ai/reference/tools/create-tool), and [VoltAgent](https://voltagent.dev/docs/agents/tools/) — don't need this: hand them the neutral tool and format inside their hook. `withFormattedOutput` is for consumers without one: raw provider loops, hand-rolled MCP servers.
 
@@ -292,7 +292,9 @@ const { text } = await generateText({
   tools: Object.fromEntries(
     tools.map(({ name, description, inputSchema, execute }) => [
       name,
-      tool({ description, inputSchema, execute }),
+      // don't pass execute positionally: the SDK calls it with its own second
+      // argument (toolCallId, messages, abortSignal), which would land in `meta`
+      tool({ description, inputSchema, execute: (input) => execute(input) }),
     ]),
   ),
 });
@@ -300,7 +302,7 @@ const { text } = await generateText({
 console.log(text);
 ```
 
-The SDK validates input; these built tools re-check it (cheap) and add the output validation the SDK skips — input guards your code from the model, output guards the model from your code. A result that fails `outputSchema` means `execute` is broken, so it throws instead of feeding the model garbage; to skip the re-check, hand the SDK your own handler.
+The SDK validates input; these built tools re-check it (cheap) and add the output validation the SDK skips — input guards your code from the model, output guards the model from your code. A result that fails `outputSchema` means `execute` is broken, so it throws instead of feeding the model garbage; to skip the re-check, keep the raw handler in scope and pass it instead — `tool({ description, inputSchema, execute: rawGetWeather })` — accepting that this also skips the output check.
 
 ### MCP
 
@@ -429,7 +431,7 @@ It ships like any other library code: a value your caller imports and runs. MCP,
 
 ## Copy-paste the source
 
-Don't want `standard-tool` in your dependency list? Own the ~90 lines. Paste this and pull the spec types from the types-only [`@standard-schema/spec`](https://github.com/standard-schema/standard-schema) (`npm i -D @standard-schema/spec`) — same logic as the published package, with the vendored interfaces swapped for that import. (You still bring a Standard Schema library for the schemas themselves, exactly as with the package.)
+Don't want `standard-tool` in your dependency list? Own the ~80 lines. Paste this and pull the spec types from the types-only [`@standard-schema/spec`](https://github.com/standard-schema/standard-schema) (`npm i -D @standard-schema/spec`) — same logic as the published package, with the vendored interfaces swapped for that import. (You still bring a Standard Schema library for the schemas themselves, exactly as with the package.)
 
 ```ts
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
@@ -528,7 +530,7 @@ async function validate<S extends StandardSchemaV1>(
 
 The field table is just [DIONE](#why) with types — `title` is the metadata slot. And yes, the moon in the logo is Saturn's Dione.
 
-`Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema`, `Input` stays `unknown` and the input passes through unvalidated. A tool that takes nothing can either omit the schema — the examples then send `{ type: 'object', properties: {} }` on the wire — or declare `z.object({})`, which consumers like the AI SDK (where `inputSchema` is required) need anyway. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod 4.2+ and ArkType 2.1.28+ directly, Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+.
+`Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema`, the input passes through unvalidated — and `Input` falls back to `unknown` unless `execute` annotates its parameter. A tool that takes nothing can either omit the schema — the examples then send `{ type: 'object', properties: {} }` on the wire — or declare `z.object({})`, which consumers like the AI SDK (where `inputSchema` is required) need anyway. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod 4.2+ and ArkType 2.1.28+ directly, Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+.
 
 The interface fixes the shape, not where validation runs: validate inside `execute` (as the reference builder does) or leave it to the consumer. The reference helpers:
 
@@ -545,7 +547,7 @@ withFormattedOutput(tool, format?): StandardToolV0<Input, Output, F>;
 
 The claim in [Why](#why) is that every ecosystem reinvents the envelope while the schema layer underneath is already standardized. The evidence:
 
-**Every tool is the same six things.**
+**Every tool is the same six things — the five parts plus display metadata.**
 
 | Concern | What it is | Who consumes it |
 | --- | --- | --- |
@@ -578,7 +580,7 @@ The columns are nearly identical; the objects are mutually incompatible, and non
 
 ## The case against
 
-- **Adoption** ([XKCD 927](https://xkcd.com/927/)). A shape nobody else produces or consumes is just a tidy wrapper for its author, and that's roughly where this sits today. The bet: the shape is obvious enough to make adapters trivial, and Standard Schema already showed a neutral interface can spread by adoption rather than mandate. There's no runtime and no lock-in, so the surface to "win" is small, but it's still one more shape on the pile until others pick it up. This is the honest weak point.
+- **Adoption** ([XKCD 927](https://xkcd.com/927/)). A shape nobody else produces or consumes is just a tidy wrapper for its author, and that's roughly where this sits today. The bet: the shape is obvious enough to make adapters trivial, and Standard Schema showed consumers adopt a neutral interface without a mandate — though it launched co-signed by the incumbent authors of Zod, Valibot, and ArkType, an advantage this proposal doesn't have yet. There's no runtime and no lock-in, so the surface to "win" is small, but it's still one more shape on the pile until others pick it up. This is the honest weak point.
 - **Why not extend an existing primitive?** Mastra's `createTool` and the AI SDK's `tool()` are the closest prior art, but each is bundled inside a framework and returns a framework-coupled value. The neutral slot is empty; this exists to make it concrete enough to argue about.
 - **`outputSchema` is rarely consumed.** Most provider APIs ignore output schemas; only MCP-style clients validate them. Today it earns its place through your own runtime safety and docs, not the model.
 

@@ -95,12 +95,18 @@ footer a:hover{color:var(--fg)}
 .md .pl-ent{color:#7ee787}
 .md .pl-k{color:#ff7b72}
 .md .pl-s,.md .pl-pds{color:#a5d6ff}
-.md .pl-v{color:#ffa657}`;
+.md .pl-v{color:#ffa657}
+.hero{text-align:center;padding:36px 0 0}
+.hero h1{font-size:38px;font-weight:600;margin:16px 0 10px;line-height:1.2}
+.hero .tagline{color:var(--muted);font-size:15px;line-height:1.7;max-width:560px;margin:0 auto}
+.hero .cta{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:20px 0 4px}
+.hero .md{text-align:left;margin-top:26px}
+.hero-rule{border:0;border-top:1px solid var(--line);margin:34px 0 0}`;
 
 const FAVICON =
-  "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%2309090b'/><text x='8' y='12' font-size='10' text-anchor='middle' fill='%23fafafa' font-family='monospace'>%7B%7D</text></svg>";
+  "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%2309090b'/><text x='4' y='12' font-size='10' text-anchor='middle' fill='%23fafafa' font-family='monospace'>%7B</text><text x='12' y='12' font-size='10' text-anchor='middle' fill='%23fafafa' font-family='monospace'>%7D</text><circle cx='8' cy='8' r='2.4' fill='%23d4d4d8'/></svg>";
 
-function page({ title, description, nav, bodyHtml }) {
+function page({ title, description, nav, heroHtml = '', bodyHtml }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -119,6 +125,7 @@ function page({ title, description, nav, bodyHtml }) {
 <a class="brand" href="./">StandardTool</a>
 <nav class="nav-links">${nav}</nav>
 </header>
+${heroHtml}
 <main class="md">
 ${bodyHtml}
 </main>
@@ -126,6 +133,7 @@ ${bodyHtml}
 <a href="https://github.com/finom/standard-tool">GitHub</a>
 <a href="https://www.npmjs.com/package/standard-tool">npm</a>
 <span>hosted on js.org</span>
+<span>the moon is Dione — description, inputSchema, outputSchema, name, execute</span>
 </footer>
 </div>
 </body>
@@ -137,9 +145,28 @@ const gh = `<a class="btn" href="https://github.com/finom/standard-tool">GitHub<
 const npm = `<a class="btn" href="https://www.npmjs.com/package/standard-tool">npm</a>`;
 
 const readmeMd = readFileSync(join(root, 'README.md'), 'utf8');
-// The npm/CI badges sit on the README's H1 (after &nbsp;) for GitHub; strip them from the site's title.
-const readmeForSite = readmeMd.replace(/^(# StandardTool)\s*&nbsp;.*$/m, '$1');
-const readmeHtml = await render(readmeForSite);
+// The README opens with a centered hero (between hero-start/hero-end markers) for GitHub;
+// the site renders its own hero below, so strip the README's.
+const HERO_END = '<!-- hero-end -->';
+const heroEnd = readmeMd.indexOf(HERO_END);
+if (heroEnd === -1) throw new Error('README hero markers not found');
+const readmeForSite = readmeMd.slice(heroEnd + HERO_END.length);
+let readmeHtml = await render(readmeForSite);
+
+// The type is the proposal — make the interface itself the hero's centerpiece:
+// pull the first rendered code block (the StandardToolV0 interface) out of the body.
+const preMatch = readmeHtml.match(/<div class="highlight[\s\S]*?<\/div>/);
+if (!preMatch) throw new Error('interface code block not found in rendered README');
+readmeHtml = readmeHtml.replace(preMatch[0], '');
+
+const heroHtml = `<section class="hero">
+<img src="./logo.svg" width="84" height="84" alt="">
+<h1>StandardTool</h1>
+<p class="tagline">One type for an LLM tool. Define it once, use it with any provider, SDK, or framework instead of rewriting the same object for each.</p>
+<div class="cta">${gh}${npm}</div>
+<div class="md">${preMatch[0]}</div>
+<hr class="hero-rule">
+</section>`;
 
 writeFileSync(
   join(docs, 'index.html'),
@@ -147,7 +174,8 @@ writeFileSync(
     title: 'StandardTool',
     description:
       'One type for an LLM tool. Define it once, use it with any provider, SDK, or framework instead of rewriting the same object for each.',
-    nav: gh + npm,
+    nav: '',
+    heroHtml,
     bodyHtml: readmeHtml,
   })
 );

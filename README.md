@@ -36,7 +36,7 @@ Frameworks keep reinventing the trivial envelope and binding it to their runtime
 
 ## Writing a tool
 
-Two ways to the same shape.
+More than one way to the same shape.
 
 **With the type.** Any object of the shape is a StandardTool — no builder, no runtime; validation is yours to place:
 
@@ -81,6 +81,24 @@ await getWeather.execute({ city: 'Paris' });
 ```
 
 To avoid the dependency entirely, [copy-paste the ~80-line source](#copy-paste-the-source).
+
+**From procedures you already have.** A tool is a name, an input schema, and a handler — which is also what an RPC procedure is. A framework whose procedures validate with [Standard Schema](https://standardschema.dev) already holds two of the three — the schema and the handler. To become a tool, that schema does one more job: emit the JSON Schema parameters the model needs, which [Standard JSON Schema](https://standardschema.dev/json-schema) covers. Both standards sit on one object in Zod 4.2+ and ArkType, so reuse the schema as `inputSchema` and route `execute` through the framework's server-side caller. With [tRPC](https://trpc.io), that caller comes from your existing router:
+
+```ts
+import { standardTool } from 'standard-tool';
+import { appRouter, cityInput } from './trpc'; // your existing router + its input schema
+
+const caller = appRouter.createCaller({}); // {} is the tRPC context
+
+const getWeather = standardTool({
+  name: 'get_weather',
+  description: 'Current temperature for a city',
+  inputSchema: cityInput,
+  execute: (input) => caller.getWeather(input),
+});
+```
+
+No annotations: `standardTool` infers input and output from the schema and the caller. The schema emits the JSON Schema; the caller keeps tRPC's own validation and context. The same trick fits any RPC framework on Standard Schema — [oRPC](https://orpc.dev) among them. So it isn't only *write a tool, get a tool*: a typed API surface you already have is a tool source, no rewrite.
 
 ## Formatting the result
 
@@ -444,7 +462,7 @@ export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutp
 }
 
 /** Wraps a raw handler so `execute` validates input and output. */
-export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
+export function standardTool<Input = void, Output = unknown, Meta = unknown>(
   def: StandardToolV0<Input, Output, Output, Meta>
 ): StandardToolV0<Input, Output, Output, Meta> {
   return {
@@ -522,7 +540,7 @@ async function validate<S extends StandardSchemaV1>(
 
 The field table is just [DIONE](#why) with types — `title` is the metadata slot. And yes, the moon in the logo is Saturn's Dione.
 
-`Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema`, the input passes through unvalidated — and `Input` falls back to `unknown` unless `execute` annotates its parameter. A tool that takes nothing can either omit the schema — the examples then send `{ type: 'object', properties: {} }` on the wire — or declare `z.object({})`, which consumers like the AI SDK (where `inputSchema` is required) need anyway. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod 4.2+ and ArkType 2.1.28+ directly, Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+. They must also be non-transforming (Standard Schema input = output): the single `Input` generic makes `execute`'s parameter both the wire type and the validated type, so `.transform()`/`.pipe()`/`z.coerce` schemas don't fit the type, and `.default()` types the handler's parameter with the pre-default side — apply defaults inside `execute` instead.
+`Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema` the input passes through unvalidated; if `execute` also takes no parameter, `Input` is `void`, so `execute()` needs no argument (annotate the parameter, or add a schema, to type and require the input). A tool that takes nothing can omit the schema — the examples then send `{ type: 'object', properties: {} }` on the wire — or declare `z.object({})`, which consumers like the AI SDK (where `inputSchema` is required) need anyway. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod 4.2+ and ArkType 2.1.28+ directly, Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+. They must also be non-transforming (Standard Schema input = output): the single `Input` generic makes `execute`'s parameter both the wire type and the validated type, so `.transform()`/`.pipe()`/`z.coerce` schemas don't fit the type, and `.default()` types the handler's parameter with the pre-default side — apply defaults inside `execute` instead.
 
 The interface fixes the shape, not where validation runs: validate inside `execute` (as the reference builder does) or leave it to the consumer. The reference helpers:
 

@@ -11,7 +11,7 @@ export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutp
 }
 
 /** Wraps a raw handler so `execute` validates input and output. */
-export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
+export function standardTool<Input = void, Output = unknown, Meta = unknown>(
   def: StandardToolV0<Input, Output, Output, Meta>
 ): StandardToolV0<Input, Output, Output, Meta> {
   return {

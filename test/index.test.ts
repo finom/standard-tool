@@ -73,14 +73,14 @@ expectType<Equals<MetaParam<typeof greet>, { locale: string } | undefined>>();
 // A tool that ignores meta leaves Meta at its `unknown` default.
 expectType<Equals<MetaParam<typeof weather>, unknown>>();
 
-// No inputSchema → Input infers from the handler; a parameterless handler leaves it unknown.
+// No inputSchema and a parameterless handler → Input is `void`, so execute() needs no argument.
 const now = standardTool({
   name: 'now',
   description: 'current timestamp',
   execute: () => ({ iso: '2026-01-01T00:00:00Z' }),
 });
 expectType<Equals<ExecOut<typeof now>, { iso: string }>>();
-now satisfies StandardToolV0<unknown, { iso: string }>;
+now satisfies StandardToolV0<void, { iso: string }>;
 
 // The MCP text-only formatter recipe from the README, verified here.
 type McpToolResult = {
@@ -123,6 +123,12 @@ test('passes the optional title through (omitted, not set to undefined, when abs
 
 test('neutral execute returns the validated value on success', async () => {
   assert.deepEqual(await weather.execute({ city: 'Paris' }), { tempC: 21 });
+});
+
+test('a parameterless handler makes execute() argument-free (Input is void)', async () => {
+  // Compiles only because Input is void: no argument required, undefined still allowed.
+  assert.deepEqual(await now.execute(), { iso: '2026-01-01T00:00:00Z' });
+  assert.deepEqual(await now.execute(undefined), { iso: '2026-01-01T00:00:00Z' });
 });
 
 test('exposes JSON Schema via Standard JSON Schema', () => {

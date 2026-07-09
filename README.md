@@ -237,7 +237,7 @@ const messages: Anthropic.MessageParam[] = [
 ];
 
 const res = await client.messages.create({
-  model: 'claude-sonnet-4-6',
+  model: 'claude-sonnet-5',
   max_tokens: 1024,
   messages,
   tools: tools.map((tool): Anthropic.Tool => ({
@@ -265,7 +265,7 @@ for (const block of res.content) {
 messages.push({ role: 'user', content: results });
 
 const final = await client.messages.create({
-  model: 'claude-sonnet-4-6',
+  model: 'claude-sonnet-5',
   max_tokens: 1024,
   messages,
 });
@@ -274,7 +274,7 @@ console.log(final.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).jo
 
 ### Vercel AI SDK
 
-The AI SDK (v6) runs the loop itself. Its `tool()` accepts a Standard Schema directly, so pass `inputSchema` as-is and hand it `execute`:
+The AI SDK (v7) runs the loop itself. Its `tool()` accepts a Standard Schema directly, so pass `inputSchema` as-is and hand it `execute`:
 
 ```ts
 import { generateText, tool, stepCountIs } from 'ai';
@@ -304,7 +304,7 @@ The SDK validates input; these built tools re-check it (cheap) and add the outpu
 
 An [MCP](https://modelcontextprotocol.io) tool returns a result envelope, `{ content, structuredContent?, isError? }`, and a descriptor whose schemas are JSON Schema. Both come from the same two parts: `jsonSchema.input()` for the descriptor, and a `withFormattedOutput(tool, toMcpResult)` formatter that maps `execute`'s result onto the envelope.
 
-The formatter below is text-only: an object becomes a JSON text block mirrored into `structuredContent` (per MCP's [back-compat guidance](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content)), and errors return `isError: true` so the model can self-correct. Image, audio, and resource blocks are out of scope.
+The formatter below is text-only: an object becomes a JSON text block mirrored into `structuredContent` (per MCP's [back-compat guidance](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#structured-content)), and errors return `isError: true` so the model can self-correct. Image, audio, and resource blocks are out of scope.
 
 ```ts
 import { withFormattedOutput } from 'standard-tool';
@@ -581,7 +581,7 @@ Not an agent runtime (no loop, plan, or model call), not a model client (no HTTP
 ## Links
 
 - [Standard Schema](https://standardschema.dev) · [Standard JSON Schema](https://standardschema.dev/json-schema) · [`@standard-schema/spec`](https://github.com/standard-schema/standard-schema)
-- [OpenAI function calling](https://developers.openai.com/api/docs/guides/function-calling) · [Anthropic tool use](https://platform.claude.com/docs/en/build-with-claude/tool-use) · [Gemini function calling](https://ai.google.dev/gemini-api/docs/function-calling) · [MCP tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)
+- [OpenAI function calling](https://developers.openai.com/api/docs/guides/function-calling) · [Anthropic tool use](https://platform.claude.com/docs/en/build-with-claude/tool-use) · [Gemini function calling](https://ai.google.dev/gemini-api/docs/function-calling) · [MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
 - [Vercel AI SDK `tool()`](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool) · [Mastra `createTool`](https://mastra.ai/reference/tools/create-tool) · [Genkit](https://genkit.dev/docs/tool-calling/) · [LangChain](https://www.npmjs.com/package/@langchain/core)
 
 ## License

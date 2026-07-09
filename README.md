@@ -112,7 +112,7 @@ const asText = withFormattedOutput(getWeather, (r) =>
 await asText.execute({ city: 'Paris' }); // '21°C'
 ```
 
-Formatting is the **consumer's last step, applied once at its own boundary**: a tool is **neutral** when `FormattedOutput = Output`. Ship and share tools neutral, and let each consumer re-target the same tool for itself. `withFormattedOutput` asks for a neutral tool: re-formatting is a type error when the formatter names `Output` (as the MCP example's `toMcpResult` does), though a bare re-wrap with the default formatter can still compile — apply-once is a norm the types back, not fully enforce.
+Formatting is the **consumer's last step, applied once at its own boundary**: a tool is **neutral** when `FormattedOutput = Output`. Ship and share tools neutral, and let each consumer re-target the same tool for itself. `withFormattedOutput` accepts only neutral tools, so re-formatting an already-formatted tool is a type error rather than a stacked envelope.
 
 Frameworks that ship their own formatting hook — `toModelOutput` in the [AI SDK](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool), [Mastra](https://mastra.ai/reference/tools/create-tool), and [VoltAgent](https://voltagent.dev/docs/agents/tools/) — don't need this: hand them the neutral tool and format inside their hook. `withFormattedOutput` is for consumers without one: raw provider loops, hand-rolled MCP servers.
 
@@ -450,12 +450,11 @@ export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutp
 export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
   def: StandardToolV0<Input, Output, Output, Meta>
 ): StandardToolV0<Input, Output, Output, Meta> {
-  const { execute: handler, ...rest } = def;
   return {
-    ...rest,
+    ...def,
     execute: async (input: Input, meta?: Meta): Promise<Output> => {
       const value = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
-      const output = await handler(value, meta);
+      const output = await def.execute(value, meta);
       return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
     },
   };
@@ -465,21 +464,26 @@ export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
  * Wrap a neutral tool so failures come back as data instead of throws.
  * Apply once, at the consumer's boundary. The formatter runs exactly once; what it throws propagates unformatted.
  */
-export function withFormattedOutput<Input, Output, FormattedOutput = Output | { error: string }, Meta = unknown>(
+export function withFormattedOutput<Input, Output, Meta = unknown>(
+  tool: StandardToolV0<Input, Output, NoInfer<Output>, Meta>
+): StandardToolV0<Input, Output, Output | { error: string }, Meta>;
+export function withFormattedOutput<Input, Output, FormattedOutput, Meta = unknown>(
+  tool: StandardToolV0<Input, Output, NoInfer<Output>, Meta>,
+  format: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>
+): StandardToolV0<Input, Output, FormattedOutput, Meta>;
+export function withFormattedOutput<Input, Output, FormattedOutput, Meta>(
   tool: StandardToolV0<Input, Output, Output, Meta>,
   format?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>
-): StandardToolV0<Input, Output, FormattedOutput, Meta> {
-  const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
-    result: Output | Error
-  ) => FormattedOutput | Promise<FormattedOutput>;
+): StandardToolV0<Input, Output, FormattedOutput | Output | { error: string }, Meta> {
+  const fmt = format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r));
   return {
     ...tool,
-    execute: async (input: Input, meta?: Meta): Promise<FormattedOutput> => {
+    execute: async (input: Input, meta?: Meta) => {
       let result: Output | Error;
       try {
         result = await tool.execute(input, meta);
       } catch (error) {
-        result = error instanceof Error ? error : new Error(String(error));
+        result = error instanceof Error ? error : new Error(String(error), { cause: error });
       }
       return fmt(result);
     },
@@ -530,7 +534,7 @@ async function validate<S extends StandardSchemaV1>(
 
 The field table is just [DIONE](#why) with types — `title` is the metadata slot. And yes, the moon in the logo is Saturn's Dione.
 
-`Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema`, the input passes through unvalidated — and `Input` falls back to `unknown` unless `execute` annotates its parameter. A tool that takes nothing can either omit the schema — the examples then send `{ type: 'object', properties: {} }` on the wire — or declare `z.object({})`, which consumers like the AI SDK (where `inputSchema` is required) need anyway. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod 4.2+ and ArkType 2.1.28+ directly, Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+.
+`Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema`, the input passes through unvalidated — and `Input` falls back to `unknown` unless `execute` annotates its parameter. A tool that takes nothing can either omit the schema — the examples then send `{ type: 'object', properties: {} }` on the wire — or declare `z.object({})`, which consumers like the AI SDK (where `inputSchema` is required) need anyway. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod 4.2+ and ArkType 2.1.28+ directly, Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+. They must also be non-transforming (Standard Schema input = output): the single `Input` generic makes `execute`'s parameter both the wire type and the validated type, so `.transform()`/`.pipe()`/`z.coerce` schemas don't fit the type, and `.default()` types the handler's parameter with the pre-default side — apply defaults inside `execute` instead.
 
 The interface fixes the shape, not where validation runs: validate inside `execute` (as the reference builder does) or leave it to the consumer. The reference helpers:
 

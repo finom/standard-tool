@@ -52,9 +52,18 @@ weatherStr satisfies StandardToolV0<{ city: string }, { tempC: number }, string>
 const weatherAsync = withFormattedOutput(weather, async (r) => ({ status: r instanceof Error ? r.message : 'ok' }));
 expectType<Equals<ExecOut<typeof weatherAsync>, { status: string }>>();
 
-// Neutral tools (FormattedOutput = Output) are asked for: re-formatting is a type error when the formatter names Output.
+// Only neutral tools (FormattedOutput = Output) are accepted: re-formatting an already-formatted tool is a type error.
 // @ts-expect-error weatherStr's execute returns string, not its Output { tempC: number }
 withFormattedOutput(weatherStr, toStr);
+// @ts-expect-error the default { error } envelope is already formatted — a bare double wrap is rejected too
+withFormattedOutput(withFormattedOutput(weather));
+// @ts-expect-error an enveloped tool cannot be re-wrapped with a new formatter either
+withFormattedOutput(withFormattedOutput(weather), toStr);
+
+// An explicit FormattedOutput without a formatter cannot fabricate a type: the no-format
+// overload has no FormattedOutput slot, so the result is still honestly Output | { error: string }.
+const fabricated = withFormattedOutput<{ city: string }, { tempC: number }, string>(weather);
+expectType<Equals<ExecOut<typeof fabricated>, { tempC: number } | { error: string }>>();
 
 // per-call meta: annotating it on the handler sets the tool's `Meta` generic, which propagates to every caller.
 const greet = standardTool({
@@ -306,4 +315,155 @@ test('the headline case: one neutral tool, each consumer formats at its own boun
   assert.equal(await withFormattedOutput(weather, toStr).execute({ city: 'Paris' }), 'ok: 21');
   // The original stays neutral.
   assert.deepEqual(await weather.execute({ city: 'Paris' }), { tempC: 21 });
+});
+
+test('method-style execute keeps `this` bound to the definition', async () => {
+  const selfNamed = standardTool({
+    name: 'self',
+    description: 'reads this.name',
+    execute(input: string) {
+      return `${this.name}: ${input}`;
+    },
+  });
+  assert.equal(await selfNamed.execute('hi'), 'self: hi');
+  assert.equal(await withFormattedOutput(selfNamed).execute('hi'), 'self: hi');
+});
+
+test('execute returns the validated values, not the raw ones', async () => {
+  let received: unknown;
+  const strict = standardTool({
+    name: 'strict',
+    description: 'echoes through schemas',
+    inputSchema,
+    outputSchema,
+    execute: async (input) => {
+      received = input;
+      return { tempC: 21, extra: 'junk' } as unknown as { tempC: number };
+    },
+  });
+  // Zod strips unknown keys, so both sides prove substitution: the handler sees the
+  // validated input, the caller sees the validated output.
+  const out = await strict.execute({ city: 'Paris', junk: 1 } as unknown as { city: string });
+  assert.deepEqual(received, { city: 'Paris' });
+  assert.deepEqual(out, { tempC: 21 });
+});
+
+test('validation-error messages render nested and {key} path segments and join multiple issues', async () => {
+  const failing = {
+    '~standard': {
+      version: 1,
+      vendor: 'test',
+      validate: () => ({
+        issues: [
+          { message: 'bad leaf', path: ['a', { key: 'b' }, 0] },
+          { message: 'top-level' }, // no path
+        ],
+      }),
+    },
+  } as unknown as NonNullable<StandardToolV0<{ a: string }>['inputSchema']>;
+  const t = standardTool({ name: 'paths', description: 'd', inputSchema: failing, execute: () => 'never' });
+  await assert.rejects(
+    () => Promise.resolve(t.execute({ a: 'x' })),
+    (err: unknown) => {
+      assert.ok(err instanceof StandardToolValidationError);
+      assert.equal(err.name, 'StandardToolValidationError');
+      assert.equal(err.message, 'input validation failed: a.b.0: bad leaf; top-level');
+      return true;
+    }
+  );
+});
+
+test('output validation failure becomes { error } data through withFormattedOutput', async () => {
+  const bad = standardTool({
+    name: 'bad',
+    description: 'wrong shape',
+    inputSchema,
+    outputSchema,
+    execute: async () => ({ tempC: 'hot' }) as unknown as { tempC: number },
+  });
+  const out = await withFormattedOutput(bad).execute({ city: 'Paris' });
+  assert.match((out as { error: string }).error, /^output validation failed:/);
+});
+
+test('a handler throw becomes { error } through the default envelope', async () => {
+  const boom = standardTool({
+    name: 'boom',
+    description: 'throws an infra error',
+    execute: (): number => {
+      throw new Error('ECONNREFUSED');
+    },
+  });
+  assert.deepEqual(await withFormattedOutput(boom).execute(undefined), { error: 'ECONNREFUSED' });
+});
+
+test('non-Error throws are normalized to an Error carrying the original on `cause`', async () => {
+  const throwsString = standardTool({
+    name: 't',
+    description: 'd',
+    execute: (): number => {
+      throw 'plain string';
+    },
+  });
+  assert.deepEqual(await withFormattedOutput(throwsString).execute(undefined), { error: 'plain string' });
+
+  const payload = { code: 42, message: 'object-err' };
+  const throwsObject = standardTool({
+    name: 't',
+    description: 'd',
+    execute: (): number => {
+      throw payload;
+    },
+  });
+  const causes: unknown[] = [];
+  const out = await withFormattedOutput(throwsObject, (r) => {
+    if (r instanceof Error) {
+      causes.push(r.cause);
+      return { error: r.message };
+    }
+    return r;
+  }).execute(undefined);
+  assert.deepEqual(out, { error: '[object Object]' }); // String(payload); the payload itself lives on cause
+  assert.equal(causes[0], payload);
+});
+
+test('async validator failure throws, and becomes data through withFormattedOutput', async () => {
+  const finiteNumber = z.number().refine(async (n) => Number.isFinite(n), 'must be finite');
+  const double = standardTool({
+    name: 'double',
+    description: 'doubles a number',
+    inputSchema: finiteNumber,
+    execute: async (n) => n * 2,
+  });
+  await assert.rejects(
+    () => Promise.resolve(double.execute(Number.POSITIVE_INFINITY)),
+    (err: unknown) => err instanceof StandardToolValidationError && err.target === 'input'
+  );
+  const out = await withFormattedOutput(double).execute(Number.POSITIVE_INFINITY);
+  assert.match((out as { error: string }).error, /^input validation failed:/);
+});
+
+test('withFormattedOutput preserves every field by identity; only execute is replaced', () => {
+  const wrapped = withFormattedOutput(weather);
+  assert.equal(wrapped.name, weather.name);
+  assert.equal(wrapped.description, weather.description);
+  assert.equal(wrapped.inputSchema, weather.inputSchema);
+  assert.equal(wrapped.outputSchema, weather.outputSchema);
+  assert.notEqual(wrapped.execute, weather.execute);
+});
+
+test('meta is forwarded by identity, through the builder and the envelope alike', async () => {
+  let seen: unknown;
+  const spy = standardTool({
+    name: 'spy',
+    description: 'records meta',
+    execute: (_input: unknown, meta?: { k: number }) => {
+      seen = meta;
+      return 0;
+    },
+  });
+  const m = { k: 1 };
+  await spy.execute(undefined, m);
+  assert.equal(seen, m); // same reference, not a copy
+  await withFormattedOutput(spy).execute(undefined, m);
+  assert.equal(seen, m);
 });

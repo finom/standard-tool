@@ -545,7 +545,7 @@ withFormattedOutput(tool, format?): StandardToolV0<Input, Output, F>;
 
 The claim in [Why](#why) is that every ecosystem reinvents the envelope while the schema layer underneath is already standardized. The evidence:
 
-**Every tool is DIONE.**
+**Every tool is the same six things.**
 
 | Concern | What it is | Who consumes it |
 | --- | --- | --- |

@@ -152,7 +152,7 @@ await greet.execute({ name: 'Ada' }, { locale: 7 });
 
 ## Using it with any provider
 
-One array of tools, wired into OpenAI, Anthropic, the Vercel AI SDK, and MCP. Two parts do the work everywhere:
+One array of tools, wired into OpenAI, Anthropic, Gemini, the Vercel AI SDK, and MCP. Two parts do the work everywhere:
 
 - `inputSchema['~standard'].jsonSchema.input({ target })` is the JSON Schema you hand the model.
 - `execute(args)` runs the call. Inside a loop, turn a throw into `{ error }` data so the model can self-correct — a bare `try`/`catch`, or `withFormattedOutput(tool).execute(args)` as the examples below do.
@@ -288,6 +288,49 @@ const final = await client.messages.create({
   messages,
 });
 console.log(final.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join(''));
+```
+
+### Gemini
+
+Function declarations take JSON Schema directly through `parametersJsonSchema`; Gemini wants the OpenAPI-3.0 subset, so emit with `target: 'openapi-3.0'`. Calls come back on `response.functionCalls`, and results go back as `functionResponse` parts.
+
+```ts
+import { GoogleGenAI, type Content, type Part } from '@google/genai';
+import { withFormattedOutput } from 'standard-tool';
+import { tools } from './tools';
+
+const ai = new GoogleGenAI({});
+const contents: Content[] = [
+  { role: 'user', parts: [{ text: 'What is the weather in Paris?' }] },
+];
+
+const res = await ai.models.generateContent({
+  model: 'gemini-2.5-flash',
+  contents,
+  config: {
+    tools: [{
+      functionDeclarations: tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        parametersJsonSchema: tool.inputSchema?.['~standard'].jsonSchema
+          .input({ target: 'openapi-3.0' }) ?? { type: 'object', properties: {} },
+      })),
+    }],
+  },
+});
+
+if (res.candidates?.[0]?.content) contents.push(res.candidates[0].content);
+const parts: Part[] = [];
+for (const call of res.functionCalls ?? []) {
+  const tool = tools.find((t) => t.name === call.name);
+  if (!tool) continue;
+  const result = await withFormattedOutput(tool).execute(call.args ?? {});
+  parts.push({ functionResponse: { name: call.name, response: { result } } });
+}
+contents.push({ role: 'user', parts });
+
+const final = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents });
+console.log(final.text);
 ```
 
 ### Vercel AI SDK

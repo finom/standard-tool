@@ -59,8 +59,6 @@ const parameters = getWeather.inputSchema?.['~standard'].jsonSchema
 
 **With the builder.** Same fields through the reference `standardTool()` — a model's args are untrusted, so it wires the validation into `execute`:
 
-[![npm](https://img.shields.io/npm/v/standard-tool)](https://www.npmjs.com/package/standard-tool)
-
 ```sh
 npm i standard-tool
 ```
@@ -403,8 +401,6 @@ expect(await withFormattedOutput(getWeather).execute({ city: 123 as never }))
 - **command palettes / CLIs** — a tool is a described command with typed args
 - **RPC / endpoints** — `name` + schemas + `execute` is a procedure
 
-Describing a tool needs only its metadata, so the docs and prompt uses read `name`/`description`/schemas without ever calling `execute`.
-
 That opens a use this hasn't had a clean shape for: **portable tools as ordinary library exports.** A library closes auth and config over each `StandardToolV0` and ships them as a client — `new OrdersClient(...)` gives you `client.getOrders`, a member that both runs and self-describes, so a model or framework picks it up with no extra wiring:
 
 ```ts
@@ -540,18 +536,9 @@ async function validate<S extends StandardSchemaV1>(
 
 The field table is just [DIONE](#why) with types — `title` is the metadata slot. And yes, the moon in the logo is Saturn's Dione.
 
-`Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema` the input passes through unvalidated; if `execute` also takes no parameter, `Input` is `void`, so `execute()` needs no argument (annotate the parameter, or add a schema, to type and require the input). A tool that takes nothing can omit the schema — the examples then send `{ type: 'object', properties: {} }` on the wire — or declare `z.object({})`, which consumers like the AI SDK (where `inputSchema` is required) need anyway. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod 4.2+ and ArkType 2.1.28+ directly, Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+. They must also be non-transforming (Standard Schema input = output): the single `Input` generic makes `execute`'s parameter both the wire type and the validated type, so `.transform()`/`.pipe()`/`z.coerce` schemas don't fit the type, and `.default()` types the handler's parameter with the pre-default side — apply defaults inside `execute` instead.
+`Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema` the input passes through unvalidated; if `execute` also takes no parameter, `Input` is `void`, so `execute()` needs no argument (annotate the parameter, or add a schema, to type and require the input). A tool that takes nothing can omit the schema — the examples then send `{ type: 'object', properties: {} }` on the wire — or declare `z.object({})`, which consumers like the AI SDK (where `inputSchema` is required) need anyway. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod and ArkType directly, Valibot via `toStandardJsonSchema()`, as above. They must also be non-transforming (Standard Schema input = output): the single `Input` generic makes `execute`'s parameter both the wire type and the validated type, so `.transform()`/`.pipe()`/`z.coerce` schemas don't fit the type, and `.default()` types the handler's parameter with the pre-default side — apply defaults inside `execute` instead.
 
-The interface fixes the shape, not where validation runs: validate inside `execute` (as the reference builder does) or leave it to the consumer. The reference helpers:
-
-```ts
-// validates in & out, throws on a violation
-standardTool(def): StandardToolV0<Input, Output>;
-// opt into a consumer-specific result — apply once, at your own boundary
-withFormattedOutput(tool, format?): StandardToolV0<Input, Output, F>;
-```
-
-`standardTool()` takes a `StandardToolV0` whose `execute` is your raw handler and returns one whose `execute` validates. `withFormattedOutput(tool, format?)` wraps a neutral tool so failures become data instead of throws. The thrown `StandardToolValidationError` carries `target: 'input' | 'output'` and the Standard Schema `issues`.
+The interface fixes the shape, not where validation runs: validate inside `execute` (as the reference builder does) or leave it to the consumer. `standardTool()`'s thrown `StandardToolValidationError` carries `target: 'input' | 'output'` and the Standard Schema `issues`.
 
 ## How it compares
 
@@ -568,7 +555,7 @@ The claim in [Why](#why) is that every ecosystem reinvents the envelope while th
 | execute | the function that runs | your runtime |
 | metadata | title, annotations, hints | clients / UIs |
 
-The two schemas carry all the complexity, because each serves two masters: emit JSON Schema (so a model can call the tool) and validate runtime data (because a model's arguments are untrusted). Everything else is a string or a function.
+The two schemas carry all the complexity; everything else is a string or a function.
 
 **The wire formats have converged on JSON-Schema parameters but disagree on the wrapper and dialect.** OpenAI uses `parameters` (with a `strict` mode that constrains the schema); Anthropic uses `input_schema`; MCP uses `inputSchema` plus `outputSchema`; Gemini uses `functionDeclarations` and accepts only an OpenAPI-3.0 subset. Same data, four shapes.
 

@@ -53,10 +53,6 @@ html{background:var(--bg-deep)}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 .wrap{max-width:768px;margin:0 auto;padding:28px 20px 80px}
 a{color:var(--fg)}
-header.nav{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px}
-.brand{font-size:15px;text-decoration:none;opacity:.9}
-.brand:hover{opacity:1}
-.nav-links{display:flex;gap:8px;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--border);border-radius:6px;padding:5px 11px;color:var(--fg);text-decoration:none;font-size:13px;line-height:1}
 .btn:hover{background:rgba(255,255,255,.06)}
 footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--muted);display:flex;gap:18px;flex-wrap:wrap;align-items:center}
@@ -106,7 +102,7 @@ footer a:hover{color:var(--fg)}
 const FAVICON =
   "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%2309090b'/><text x='4' y='12' font-size='10' text-anchor='middle' fill='%23fafafa' font-family='monospace'>%7B</text><text x='12' y='12' font-size='10' text-anchor='middle' fill='%23fafafa' font-family='monospace'>%7D</text><circle cx='8' cy='8' r='2.4' fill='%23d4d4d8'/></svg>";
 
-function page({ title, description, nav, heroHtml = '', bodyHtml }) {
+function page({ title, description, heroHtml = '', bodyHtml }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -121,10 +117,6 @@ function page({ title, description, nav, heroHtml = '', bodyHtml }) {
 </head>
 <body>
 <div class="wrap">
-<header class="nav">
-<a class="brand" href="./">StandardTool</a>
-<nav class="nav-links">${nav}</nav>
-</header>
 ${heroHtml}
 <main class="md">
 ${bodyHtml}
@@ -174,7 +166,6 @@ writeFileSync(
     title: 'StandardTool',
     description:
       'One type for an LLM tool. Define it once, use it with any provider, SDK, or framework instead of rewriting the same object for each.',
-    nav: '',
     heroHtml,
     bodyHtml: readmeHtml,
   })

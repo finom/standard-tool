@@ -3,10 +3,6 @@
 <h1 align="center">Standard Tool</h1>
 <p align="center">One type for an LLM tool.<br>Define it once, use it with any provider, SDK, or framework.</p>
 <p align="center"><a href="https://standard-tool.js.org">standard-tool.js.org</a></p>
-<p align="center">
-  <a href="https://github.com/finom/standard-tool/actions/workflows/ci.yml"><img src="https://github.com/finom/standard-tool/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.npmjs.com/package/standard-tool"><img src="https://img.shields.io/npm/v/standard-tool" alt="npm"></a>
-</p>
 <!-- hero-end -->
 
 ```ts

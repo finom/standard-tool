@@ -59,6 +59,8 @@ const parameters = getWeather.inputSchema?.['~standard'].jsonSchema
 
 **With the builder.** Same fields through the reference `standardTool()` — a model's args are untrusted, so it wires the validation into `execute`:
 
+[![npm](https://img.shields.io/npm/v/standard-tool)](https://www.npmjs.com/package/standard-tool)
+
 ```sh
 npm i standard-tool
 ```

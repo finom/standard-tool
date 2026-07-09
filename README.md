@@ -32,7 +32,7 @@ The schemas pull double duty: they validate runtime data (a model's arguments ar
 
 ## Why
 
-Every LLM ecosystem ships its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain, oRPC, Effect. They all describe the same six things (name, description, input schema, output schema, `execute`, a little metadata), yet none is portable and most are welded to a runtime.
+Every LLM ecosystem ships its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain, oRPC, Effect. Strip any of them and the same five parts fall out — **DIONE**: **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute — plus a little display metadata. It's the CRUD of LLM tools: universal in substance, spelled differently by every framework, portable in none.
 
 The hard part of that list is already solved. [Standard Schema](https://standardschema.dev) unified validation; [Standard JSON Schema](https://standardschema.dev/json-schema) unified JSON Schema emission. Once the schemas cover both jobs, everything left in a tool is two strings and a function.
 
@@ -526,7 +526,7 @@ async function validate<S extends StandardSchemaV1>(
 | `outputSchema?` | `StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>` | validates and emits JSON Schema |
 | `execute` | `(input: Input, meta?: Meta) => FormattedOutput \| Promise<FormattedOutput>` | runs the tool; input untrusted until checked against `inputSchema`; may throw |
 
-The five working fields spell **DIONE** — **d**escription, **i**nputSchema, **o**utputSchema, **n**ame, **e**xecute; `title` is just a label. And yes: that's the moon in the logo, Saturn's Dione.
+The field table is just [DIONE](#why) with types — `title` is the metadata slot. And yes, the moon in the logo is Saturn's Dione.
 
 `Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema`, `Input` stays `unknown` and the input passes through unvalidated. A tool that takes nothing can either omit the schema — the examples then send `{ type: 'object', properties: {} }` on the wire — or declare `z.object({})`, which consumers like the AI SDK (where `inputSchema` is required) need anyway. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod 4.2+ and ArkType 2.1.28+ directly, Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+.
 
@@ -545,7 +545,7 @@ withFormattedOutput(tool, format?): StandardToolV0<Input, Output, F>;
 
 The claim in [Why](#why) is that every ecosystem reinvents the envelope while the schema layer underneath is already standardized. The evidence:
 
-**Every tool is the same six things.**
+**Every tool is DIONE.**
 
 | Concern | What it is | Who consumes it |
 | --- | --- | --- |

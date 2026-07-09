@@ -125,7 +125,7 @@ ${bodyHtml}
 <a href="https://github.com/finom/standard-tool">GitHub</a>
 <a href="https://www.npmjs.com/package/standard-tool">npm</a>
 <span>hosted on js.org</span>
-<span>the moon is Dione — description, inputSchema, outputSchema, name, execute</span>
+<span>the moon is Dione — description, input schema, output schema, name, execute</span>
 </footer>
 </div>
 </body>

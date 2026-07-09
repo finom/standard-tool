@@ -32,7 +32,7 @@ The schemas pull double duty: they validate runtime data (a model's arguments ar
 
 ## Why
 
-Every LLM ecosystem ships its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain, oRPC, Effect. Strip any of them and the same five parts fall out — **DIONE**: **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute — plus a little display metadata. It's the CRUD of LLM tools: universal in substance, spelled differently by every framework, portable in none.
+Every LLM ecosystem ships its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain, oRPC, Effect. Strip any of them and the same five parts fall out — **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute; call it **DIONE** — plus a little display metadata. Universal in substance, spelled differently by every framework, portable in none.
 
 The hard part of that list is already solved. [Standard Schema](https://standardschema.dev) unified validation; [Standard JSON Schema](https://standardschema.dev/json-schema) unified JSON Schema emission. Once the schemas cover both jobs, everything left in a tool is two strings and a function.
 

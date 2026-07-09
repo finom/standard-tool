@@ -153,7 +153,7 @@ readmeHtml = readmeHtml.replace(preMatch[0], '');
 
 const heroHtml = `<section class="hero">
 <img src="./logo.svg" width="84" height="84" alt="">
-<h1>StandardTool</h1>
+<h1>Standard Tool</h1>
 <p class="tagline">One type for an LLM tool. Define it once, use it with any provider, SDK, or framework instead of rewriting the same object for each.</p>
 <div class="cta">${gh}${npm}</div>
 <div class="md">${preMatch[0]}</div>
@@ -163,7 +163,7 @@ const heroHtml = `<section class="hero">
 writeFileSync(
   join(docs, 'index.html'),
   page({
-    title: 'StandardTool',
+    title: 'Standard Tool',
     description:
       'One type for an LLM tool. Define it once, use it with any provider, SDK, or framework instead of rewriting the same object for each.',
     heroHtml,

@@ -1,6 +1,6 @@
 <!-- hero-start -->
-<p align="center"><img src="docs/logo.svg" width="84" height="84" alt="StandardTool logo"></p>
-<h1 align="center">StandardTool</h1>
+<p align="center"><img src="docs/logo.svg" width="84" height="84" alt="Standard Tool logo"></p>
+<h1 align="center">Standard Tool</h1>
 <p align="center">One type for an LLM tool.<br>Define it once, use it with any provider, SDK, or framework.</p>
 <p align="center"><a href="https://standard-tool.js.org">standard-tool.js.org</a></p>
 <p align="center">
@@ -36,7 +36,7 @@ Every LLM ecosystem ships its own tool object: Vercel AI SDK, MCP, Mastra, Genki
 
 The hard part of that list is already solved. [Standard Schema](https://standardschema.dev) unified validation; [Standard JSON Schema](https://standardschema.dev/json-schema) unified JSON Schema emission. Once the schemas cover both jobs, everything left in a tool is two strings and a function.
 
-So the work is backwards. Frameworks keep reinventing the trivial envelope and binding it to their runtime, while the one shared piece gets treated as proprietary. StandardTool standardizes the envelope too: a ten-line interface, no runtime, no lock-in. [The full survey is below.](#how-it-compares)
+So the work is backwards. Frameworks keep reinventing the trivial envelope and binding it to their runtime, while the one shared piece gets treated as proprietary. Standard Tool standardizes the envelope too: a ten-line interface, no runtime, no lock-in. [The full survey is below.](#how-it-compares)
 
 ## Writing a tool
 
@@ -570,11 +570,11 @@ The two schemas carry all the complexity, because each serves two masters: emit 
 | Mastra | `inputSchema` | `outputSchema` | `execute` | Standard JSON Schema | needs `@mastra/core` |
 | Genkit | `inputSchema` | `outputSchema` | fn | Zod | needs a live `genkit()` |
 | LangChain | `schema` | n/a | fn | Zod / inferred | needs `@langchain/core` |
-| **StandardTool** | `inputSchema` | `outputSchema` | `execute` | Standard (JSON) Schema | **plain object, zero deps** |
+| **Standard Tool** | `inputSchema` | `outputSchema` | `execute` | Standard (JSON) Schema | **plain object, zero deps** |
 
 The columns are nearly identical; the objects are mutually incompatible, and none is obtainable on its own. There's no `createTool` without `@mastra/core`, no `defineTool` without a live `genkit()` instance, no `tool()` without `ai` or `@langchain/core`. So "just reuse framework X's tool" means adopting framework X. The neutral, zero-dependency slot is empty. (Mastra already builds its schemas on Standard JSON Schema, so the foundation is shared; only the envelope isn't.)
 
-**The schema layer, by contrast, is solved.** [Standard Schema](https://standardschema.dev) is a ~60-line interface co-designed by the authors of Zod, Valibot, and ArkType, already consumed by tRPC and TanStack; it unifies validation. [Standard JSON Schema](https://standardschema.dev/json-schema) adds emission, with the dialect selectable per call (`target` spans multiple JSON Schema standards) and zero runtime dependencies. Validation and emission are both handled and dependency-free to consume. The envelope is the easy part, and it's the part that's still missing. That inversion is what StandardTool answers.
+**The schema layer, by contrast, is solved.** [Standard Schema](https://standardschema.dev) is a ~60-line interface co-designed by the authors of Zod, Valibot, and ArkType, already consumed by tRPC and TanStack; it unifies validation. [Standard JSON Schema](https://standardschema.dev/json-schema) adds emission, with the dialect selectable per call (`target` spans multiple JSON Schema standards) and zero runtime dependencies. Validation and emission are both handled and dependency-free to consume. The envelope is the easy part, and it's the part that's still missing. That inversion is what Standard Tool answers.
 
 ## The case against
 

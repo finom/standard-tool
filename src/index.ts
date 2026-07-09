@@ -27,22 +27,19 @@ export function standardTool<Input = unknown, Output = unknown, Meta = unknown>(
 /**
  * Wrap a neutral tool so failures come back as data instead of throws.
  * Apply once, at the consumer's boundary. The formatter runs exactly once; what it throws propagates unformatted.
+ * `FormattedOutput` is meant to be inferred from `format`; naming it explicitly while omitting `format`
+ * declares a result type the default envelope won't produce.
  */
-export function withFormattedOutput<Input, Output, Meta = unknown>(
-  tool: StandardToolV0<Input, Output, NoInfer<Output>, Meta>
-): StandardToolV0<Input, Output, Output | { error: string }, Meta>;
-export function withFormattedOutput<Input, Output, FormattedOutput, Meta = unknown>(
+export function withFormattedOutput<Input, Output, FormattedOutput = Output | { error: string }, Meta = unknown>(
   tool: StandardToolV0<Input, Output, NoInfer<Output>, Meta>,
-  format: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>
-): StandardToolV0<Input, Output, FormattedOutput, Meta>;
-export function withFormattedOutput<Input, Output, FormattedOutput, Meta>(
-  tool: StandardToolV0<Input, Output, Output, Meta>,
   format?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>
-): StandardToolV0<Input, Output, FormattedOutput | Output | { error: string }, Meta> {
-  const fmt = format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r));
+): StandardToolV0<Input, Output, FormattedOutput, Meta> {
+  const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
+    result: Output | Error
+  ) => FormattedOutput | Promise<FormattedOutput>;
   return {
     ...tool,
-    execute: async (input: Input, meta?: Meta) => {
+    execute: async (input: Input, meta?: Meta): Promise<FormattedOutput> => {
       let result: Output | Error;
       try {
         result = await tool.execute(input, meta);

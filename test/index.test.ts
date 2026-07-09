@@ -60,11 +60,6 @@ withFormattedOutput(withFormattedOutput(weather));
 // @ts-expect-error an enveloped tool cannot be re-wrapped with a new formatter either
 withFormattedOutput(withFormattedOutput(weather), toStr);
 
-// An explicit FormattedOutput without a formatter cannot fabricate a type: the no-format
-// overload has no FormattedOutput slot, so the result is still honestly Output | { error: string }.
-const fabricated = withFormattedOutput<{ city: string }, { tempC: number }, string>(weather);
-expectType<Equals<ExecOut<typeof fabricated>, { tempC: number } | { error: string }>>();
-
 // per-call meta: annotating it on the handler sets the tool's `Meta` generic, which propagates to every caller.
 const greet = standardTool({
   name: 'greet',

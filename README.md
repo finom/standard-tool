@@ -28,7 +28,7 @@ The schemas pull double duty: they validate runtime data (a model's arguments ar
 
 ## Why
 
-Every LLM ecosystem ships its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain. Strip any of them and the same five parts fall out — **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute; call it **DIONE** — plus a little display metadata. A tool written for one framework is not portable to the others.
+Every LLM ecosystem ships its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain. Strip any of them and the same five parts fall out — a name, a description, an input schema, an output schema, and an execute function — plus a little display metadata. A tool written for one framework is not portable to the others.
 
 The hard part of that list is already solved. [Standard Schema](https://standardschema.dev) unified validation; [Standard JSON Schema](https://standardschema.dev/json-schema) unified JSON Schema emission. Once the schemas cover both jobs, everything left in a tool is two strings and a function.
 
@@ -577,7 +577,7 @@ async function validate<S extends StandardSchemaV1>(
 | `outputSchema?` | `StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>` | validates and emits JSON Schema |
 | `execute` | `(input: Input, meta?: Meta) => FormattedOutput \| Promise<FormattedOutput>` | runs the tool; input untrusted until checked against `inputSchema`; may throw |
 
-The field table is just [DIONE](#why) with types — `title` is the metadata slot. And yes, the moon in the logo is Saturn's Dione.
+The field table is just [the five parts](#why) with types — `title` is the metadata slot. (The moon in the logo is Saturn's Dione: **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute.)
 
 `Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema` the input passes through unvalidated; if `execute` also takes no parameter, `Input` is `void`, so `execute()` needs no argument (annotate the parameter, or add a schema, to type and require the input). A tool that takes nothing can omit the schema — the examples then send `{ type: 'object', properties: {} }` on the wire — or declare `z.object({})`, which consumers like the AI SDK (where `inputSchema` is required) need anyway. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod and ArkType directly, Valibot via `toStandardJsonSchema()`, as above. They must also be non-transforming (Standard Schema input = output): the single `Input` generic makes `execute`'s parameter both the wire type and the validated type, so `.transform()`/`.pipe()`/`z.coerce` schemas don't fit the type, and `.default()` types the handler's parameter with the pre-default side — apply defaults inside `execute` instead.
 

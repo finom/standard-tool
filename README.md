@@ -16,7 +16,7 @@ interface StandardToolV0<
   description: string;
   inputSchema?: StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>;
   outputSchema?: StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>;
-  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>; // FormattedOutput defaults to Output
+  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>;
 }
 ```
 
@@ -80,7 +80,7 @@ await getWeather.execute({ city: 'Paris' });
 
 To avoid the dependency entirely, [copy-paste the ~80-line source](#copy-paste-the-source).
 
-**From procedures you already have.** A tool is a name, an input schema, and a handler — which is also what an RPC procedure is. A framework whose procedures validate with [Standard Schema](https://standardschema.dev) already holds two of the three — the schema and the handler. To become a tool, that schema does one more job: emit the JSON Schema parameters the model needs, which [Standard JSON Schema](https://standardschema.dev/json-schema) covers. Both standards sit on one object in Zod 4.2+ and ArkType, so reuse the schema as `inputSchema` and route `execute` through the framework's server-side caller. With [tRPC](https://trpc.io), that caller comes from your existing router:
+**From procedures you already have.** A tool is a name, an input schema, and a handler — which is also what an RPC procedure is. A framework whose procedures validate with [Standard Schema](https://standardschema.dev) already holds two of the three — the schema and the handler; when the schema also carries [Standard JSON Schema](https://standardschema.dev/json-schema), reuse it as `inputSchema` and route `execute` through the framework's server-side caller. With [tRPC](https://trpc.io), that caller comes from your existing router:
 
 ```ts
 import { standardTool } from 'standard-tool';
@@ -157,7 +157,7 @@ One array of tools, wired into OpenAI, Anthropic, Gemini, the Vercel AI SDK, and
 - `inputSchema['~standard'].jsonSchema.input({ target })` is the JSON Schema you hand the model.
 - `execute(args)` runs the call. Inside a loop, turn a throw into `{ error }` data so the model can self-correct — a bare `try`/`catch`, or `withFormattedOutput(tool).execute(args)` as the examples below do.
 
-Examples use Zod; the model only ever sees emitted JSON Schema, so ArkType and Valibot produce identical calls — ArkType the same way as Zod, Valibot by wrapping each schema in `toStandardJsonSchema()` from `@valibot/to-json-schema`. They assume you've installed the relevant provider SDK.
+Examples use Zod; the model only ever sees emitted JSON Schema, so ArkType and Valibot produce identical calls. They assume you've installed the relevant provider SDK.
 
 ### The tools
 
@@ -359,7 +359,7 @@ const { text } = await generateText({
 console.log(text);
 ```
 
-The SDK validates input; these built tools re-check it (cheap) and add the output validation the SDK skips — input guards your code from the model, output guards the model from your code. A result that fails `outputSchema` means `execute` is broken, so it throws instead of feeding the model garbage; to skip the re-check, keep the raw handler in scope and pass it instead — `tool({ description, inputSchema, execute: rawGetWeather })` — accepting that this also skips the output check.
+The SDK validates input; these built tools re-check it (cheap) and add the output validation the SDK skips — input guards your code from the model, output guards the model from your code.
 
 ### MCP
 
@@ -430,9 +430,9 @@ expect(await withFormattedOutput(getWeather).execute({ city: 123 as never }))
 
 ### Notes
 
-- **Who validates.** OpenAI and Anthropic don't check arguments against your schema — the tool's schemas are the only line of validation, so run them on the model's raw args. In the examples that happens inside the built tools' `execute`; `withFormattedOutput` only turns the throw into data. The AI SDK validates input against `inputSchema`, but not `execute`'s output — its `outputSchema` is types-only.
+- **Who validates.** OpenAI and Anthropic don't check arguments against your schema — the tool's schemas are the only line of validation, so run them on the model's raw args. In the examples that happens inside the built tools' `execute`; `withFormattedOutput` only turns the throw into data.
 - **Bad JSON.** `JSON.parse` runs before `execute`, so guard it if the model might emit invalid JSON syntax; that throws before `execute` can turn a failure into `{ error }`.
-- **JSON Schema targets.** `draft-2020-12` fits OpenAI and Anthropic; use `openapi-3.0` for the OpenAPI subset (Gemini), or `draft-07`.
+- **JSON Schema targets.** `draft-2020-12` fits OpenAI and Anthropic; use `openapi-3.0` for the OpenAPI subset (Gemini).
 
 ## Beyond LLM tools
 
@@ -464,21 +464,6 @@ const client = new OrdersClient({ apiKey: '…' });
 await client.getOrders.execute({ userId: 'u_1' }); // run it
 await withFormattedOutput(client.getOrders).execute({ userId: 'u_1' }); // → to a model
 client.getOrders.description; // self-describing
-```
-
-Alternatively, when the bare function should stay directly callable, hang the tool off it as a property — `getOrders` is the function, `getOrders.tool` the descriptor:
-
-```ts
-export async function getOrders(input: { userId: string }) { /* …hit the API… */ }
-getOrders.tool = standardTool({
-  name: 'get_orders',
-  description: "List a user's orders",
-  inputSchema: z.object({ userId: z.string() }),
-  execute: getOrders,
-});
-
-await getOrders({ userId: 'u_1' }); // call it directly
-await withFormattedOutput(getOrders.tool).execute({ userId: 'u_1' }); // → to a model
 ```
 
 It ships like any other library code: a value your caller imports and runs. MCP, by contrast, is a protocol — you stand up a server to speak it. How you build the tool stays idiomatic per library (a class, a factory, a bare export); only the result is fixed — every member is a `StandardToolV0`.
@@ -579,7 +564,7 @@ async function validate<S extends StandardSchemaV1>(
 
 The field table is just [the five parts](#why) with types — `title` is the metadata slot. (The moon in the logo is Saturn's Dione: **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute.)
 
-`Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema` the input passes through unvalidated; if `execute` also takes no parameter, `Input` is `void`, so `execute()` needs no argument (annotate the parameter, or add a schema, to type and require the input). A tool that takes nothing can omit the schema — the examples then send `{ type: 'object', properties: {} }` on the wire — or declare `z.object({})`, which consumers like the AI SDK (where `inputSchema` is required) need anyway. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema — Zod and ArkType directly, Valibot via `toStandardJsonSchema()`, as above. They must also be non-transforming (Standard Schema input = output): the single `Input` generic makes `execute`'s parameter both the wire type and the validated type, so `.transform()`/`.pipe()`/`z.coerce` schemas don't fit the type, and `.default()` types the handler's parameter with the pre-default side — apply defaults inside `execute` instead.
+`Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema` the input passes through unvalidated. A tool that takes nothing can omit the schema and the parameter — `execute()` then takes no argument — or declare `z.object({})` for consumers like the AI SDK, where `inputSchema` is required. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema. They must also be non-transforming (Standard Schema input = output): the single `Input` generic makes `execute`'s parameter both the wire type and the validated type, so `.transform()`/`.pipe()`/`z.coerce` schemas don't fit the type, and `.default()` types the handler's parameter with the pre-default side — apply defaults inside `execute` instead.
 
 The interface fixes the shape, not where validation runs: validate inside `execute` (as the reference builder does) or leave it to the consumer. `standardTool()`'s thrown `StandardToolValidationError` carries `target: 'input' | 'output'` and the Standard Schema `issues`.
 

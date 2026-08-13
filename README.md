@@ -9,14 +9,15 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 
 interface StandardToolV0<
-  Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown,
+  Input = unknown, Output = unknown, FormattedOutput = Output, Context = unknown,
 > {
   name: string;
   title?: string; // human label; shown by MCP-style clients in tool lists
   description: string;
   inputSchema?: StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>;
   outputSchema?: StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>;
-  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>;
+  meta?: Record<string, unknown>; // static data about the tool, for consumers to read
+  execute(input: Input, context?: Context): FormattedOutput | Promise<FormattedOutput>;
 }
 ```
 
@@ -130,25 +131,51 @@ Formatting is the **consumer's last step, applied once at its own boundary**: a 
 
 Frameworks that ship their own formatting hook — `toModelOutput` in the [AI SDK](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool), [Mastra](https://mastra.ai/reference/tools/create-tool), and [VoltAgent](https://voltagent.dev/docs/agents/tools/) — don't need this: hand them the neutral tool and format inside their hook. `withFormattedOutput` is for consumers without one: raw provider loops, hand-rolled MCP servers.
 
-## Per-call context (`meta`)
+## Per-call context (`context`)
 
-`execute` takes an optional second argument, `meta`. It's never validated and never in the JSON Schema. Use it for a locale, an auth token, a request-scoped DB handle: the tool stays defined once at module scope while you inject context at call time.
+`execute` takes an optional second argument, `context`. It's never validated and never in the JSON Schema. Use it for a locale, an auth token, a request-scoped DB handle: the tool stays defined once at module scope while you inject context at call time.
 
-Annotate `meta` on the handler and the type propagates to every caller:
+Annotate `context` on the handler and the type propagates to every caller:
 
 ```ts
 const greet = standardTool({
   name: 'greet',
   description: 'Greet a person in the caller-supplied locale',
   inputSchema: z.object({ name: z.string() }),
-  execute: ({ name }, meta: { locale: string }) =>
-    meta.locale === 'fr' ? `bonjour ${name}` : `hi ${name}`,
+  execute: ({ name }, context: { locale: string }) =>
+    context.locale === 'fr' ? `bonjour ${name}` : `hi ${name}`,
 });
 
 await greet.execute({ name: 'Ada' }, { locale: 'fr' }); // 'bonjour Ada'
-// compile error: Meta is { locale: string }
+// compile error: Context is { locale: string }
 await greet.execute({ name: 'Ada' }, { locale: 7 });
 ```
+
+## Tool-level data (`meta`)
+
+`context` travels with a *call*; `meta` travels with the *tool*. It's a plain untyped bag that consumers read and `execute` never sees — behavioural hints (is this destructive? safe to auto-run without asking the user?), tags for deciding which tools go into a given prompt, a version, an owning team:
+
+```ts
+const deleteFile = standardTool({
+  name: 'delete_file',
+  description: 'Delete a file',
+  inputSchema: z.object({ path: z.string() }),
+  meta: { destructive: true, tags: ['fs'] },
+  execute: ({ path }) => unlink(path),
+});
+
+if (deleteFile.meta?.destructive) await confirmWithUser(); // consumer decides
+```
+
+It's deliberately `Record<string, unknown>` rather than a fifth generic: tools are usually held as `StandardToolV0[]`, where a generic would erase to `unknown` anyway. When you do want a typed bag, narrow with an intersection and it stays an ordinary StandardTool:
+
+```ts
+type BudgetedTool = StandardToolV0<{ path: string }, string> & { meta: { budget: number } };
+declare const tool: BudgetedTool;
+tool.meta.budget; // number
+```
+
+Since the spec fixes no keys, two producers using `meta.destructive` differently still don't interoperate — agree on the keys within your own system, or follow an existing vocabulary such as MCP's tool annotations.
 
 ## Using it with any provider
 
@@ -350,7 +377,7 @@ const { text } = await generateText({
     tools.map(({ name, description, inputSchema, execute }) => [
       name,
       // don't pass execute positionally: the SDK calls it with its own second
-      // argument (toolCallId, messages, abortSignal), which would land in `meta`
+      // argument (toolCallId, messages, abortSignal), which would land in `context`
       tool({ description, inputSchema, execute: (input) => execute(input) }),
     ]),
   ),
@@ -476,43 +503,44 @@ The helpers below are ~80 lines and can be vendored instead of installing `stand
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 
 /** Portable LLM tool. The type fixes the shape, not where validation runs; ship it neutral, format at the consumer boundary. */
-export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> {
+export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutput = Output, Context = unknown> {
   name: string;
   title?: string;
   description: string;
   inputSchema?: StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>;
   outputSchema?: StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>;
-  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>;
+  meta?: Record<string, unknown>;
+  execute(input: Input, context?: Context): FormattedOutput | Promise<FormattedOutput>;
 }
 
 /** Wraps a raw handler so `execute` validates input and output. */
-export function standardTool<Input = void, Output = unknown, Meta = unknown>(
-  def: StandardToolV0<Input, Output, Output, Meta>
-): StandardToolV0<Input, Output, Output, Meta> {
+export function standardTool<Input = void, Output = unknown, Context = unknown>(
+  def: StandardToolV0<Input, Output, Output, Context>
+): StandardToolV0<Input, Output, Output, Context> {
   return {
     ...def,
-    execute: async (input: Input, meta?: Meta): Promise<Output> => {
+    execute: async (input: Input, context?: Context): Promise<Output> => {
       const value = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
-      const output = await def.execute(value, meta);
+      const output = await def.execute(value, context);
       return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
     },
   };
 }
 
 /** Wrap a neutral tool so failures return as data, not throws. Apply once, at the consumer boundary. */
-export function withFormattedOutput<Input, Output, FormattedOutput = Output | { error: string }, Meta = unknown>(
-  tool: StandardToolV0<Input, Output, NoInfer<Output>, Meta>,
+export function withFormattedOutput<Input, Output, FormattedOutput = Output | { error: string }, Context = unknown>(
+  tool: StandardToolV0<Input, Output, NoInfer<Output>, Context>,
   format?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>
-): StandardToolV0<Input, Output, FormattedOutput, Meta> {
+): StandardToolV0<Input, Output, FormattedOutput, Context> {
   const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
     result: Output | Error
   ) => FormattedOutput | Promise<FormattedOutput>;
   return {
     ...tool,
-    execute: async (input: Input, meta?: Meta): Promise<FormattedOutput> => {
+    execute: async (input: Input, context?: Context): Promise<FormattedOutput> => {
       let result: Output | Error;
       try {
-        result = await tool.execute(input, meta);
+        result = await tool.execute(input, context);
       } catch (error) {
         result = error instanceof Error ? error : new Error(String(error), { cause: error });
       }
@@ -560,9 +588,10 @@ async function validate<S extends StandardSchemaV1>(
 | `title?` | `string` | human label for MCP-style tool lists; ignored by plain function-calling APIs |
 | `inputSchema?` | `StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>` | validates and emits JSON Schema |
 | `outputSchema?` | `StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>` | validates and emits JSON Schema |
-| `execute` | `(input: Input, meta?: Meta) => FormattedOutput \| Promise<FormattedOutput>` | runs the tool; input untrusted until checked against `inputSchema`; may throw |
+| `meta?` | `Record<string, unknown>` | static data about the tool; read by consumers, never passed to `execute` |
+| `execute` | `(input: Input, context?: Context) => FormattedOutput \| Promise<FormattedOutput>` | runs the tool; input untrusted until checked against `inputSchema`; may throw |
 
-The field table is just [the five parts](#why) with types — `title` is the metadata slot. (The moon in the logo is Saturn's Dione: **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute.)
+The field table is just [the five parts](#why) with types — `title` and `meta` are the optional extras. (The moon in the logo is Saturn's Dione: **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute.)
 
 `Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema` the input passes through unvalidated. A tool that takes nothing can omit the schema and the parameter — `execute()` then takes no argument — or declare `z.object({})` for consumers like the AI SDK, where `inputSchema` is required. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema. They must also be non-transforming (Standard Schema input = output): the single `Input` generic makes `execute`'s parameter both the wire type and the validated type, so `.transform()`/`.pipe()`/`z.coerce` schemas don't fit the type, and `.default()` types the handler's parameter with the pre-default side — apply defaults inside `execute` instead.
 

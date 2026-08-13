@@ -14,7 +14,7 @@ import { standardTool, withFormattedOutput, StandardToolValidationError, type St
 // Compile-time helpers (checked by `npm run typecheck`), mirroring index.test.ts.
 type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type ExecOut<T extends { execute: (input: never) => unknown }> = Awaited<ReturnType<T['execute']>>;
-type MetaParam<T extends { execute: (input: never) => unknown }> = Parameters<T['execute']>[1];
+type ContextParam<T extends { execute: (input: never) => unknown }> = Parameters<T['execute']>[1];
 const expectType = <_Pass extends true>(): void => {};
 
 // ── The "existing tRPC app" the README imports as `./trpc`. In a real project
@@ -35,9 +35,9 @@ const getWeather = standardTool({
   execute: (input) => caller.getWeather(input),
 });
 
-// No manual generics: standardTool infers Input, Output, and a clean (unknown) Meta.
+// No manual generics: standardTool infers Input, Output, and a clean (unknown) Context.
 expectType<Equals<ExecOut<typeof getWeather>, { tempC: number }>>();
-expectType<Equals<MetaParam<typeof getWeather>, unknown>>();
+expectType<Equals<ContextParam<typeof getWeather>, unknown>>();
 getWeather satisfies StandardToolV0<{ city: string }, { tempC: number }>;
 
 test('execute routes through the tRPC caller and returns the procedure result', async () => {
@@ -83,7 +83,7 @@ test('bare `execute: caller.getWeather` behaves identically to the wrapped form'
     execute: caller.getWeather,
   });
   expectType<Equals<ExecOut<typeof bare>, { tempC: number }>>();
-  expectType<Equals<MetaParam<typeof bare>, unknown>>(); // no Meta pollution from the method
+  expectType<Equals<ContextParam<typeof bare>, unknown>>(); // no Context pollution from the method
   assert.deepEqual(await bare.execute({ city: 'Paris' }), { tempC: 21 });
 });
 

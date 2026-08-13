@@ -5,10 +5,10 @@ import { standardTool, withFormattedOutput, StandardToolValidationError, type St
 
 // Compile-time type assertions (checked by `npm run typecheck`). expectType<T> accepts
 // only `true`, so a wrong type fails to compile. ExecOut<T> = the awaited execute() return;
-// MetaParam<T> = execute()'s meta parameter type.
+// ContextParam<T> = execute()'s context parameter type.
 type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type ExecOut<T extends { execute: (input: never) => unknown }> = Awaited<ReturnType<T['execute']>>;
-type MetaParam<T extends { execute: (input: never) => unknown }> = Parameters<T['execute']>[1];
+type ContextParam<T extends { execute: (input: never) => unknown }> = Parameters<T['execute']>[1];
 const expectType = <_Pass extends true>(): void => {};
 
 // Real Zod schemas (Zod 4.2+ implements both Standard Schema and Standard JSON Schema).
@@ -60,18 +60,18 @@ withFormattedOutput(withFormattedOutput(weather));
 // @ts-expect-error an enveloped tool cannot be re-wrapped with a new formatter either
 withFormattedOutput(withFormattedOutput(weather), toStr);
 
-// per-call meta: annotating it on the handler sets the tool's `Meta` generic, which propagates to every caller.
+// per-call context: annotating it on the handler sets the tool's `Context` generic, which propagates to every caller.
 const greet = standardTool({
   name: 'greet',
   description: 'greets a person in the caller-supplied locale',
   inputSchema: z.object({ name: z.string() }),
-  execute: ({ name }, meta: { locale: string }) => (meta.locale === 'fr' ? `bonjour ${name}` : `hi ${name}`),
+  execute: ({ name }, context: { locale: string }) => (context.locale === 'fr' ? `bonjour ${name}` : `hi ${name}`),
 });
 expectType<Equals<ExecOut<typeof greet>, string>>();
-// Meta propagated from the handler annotation to the call site (optional param → `| undefined`).
-expectType<Equals<MetaParam<typeof greet>, { locale: string } | undefined>>();
-// A tool that ignores meta leaves Meta at its `unknown` default.
-expectType<Equals<MetaParam<typeof weather>, unknown>>();
+// Context propagated from the handler annotation to the call site (optional param → `| undefined`).
+expectType<Equals<ContextParam<typeof greet>, { locale: string } | undefined>>();
+// A tool that ignores context leaves Context at its `unknown` default.
+expectType<Equals<ContextParam<typeof weather>, unknown>>();
 
 // No inputSchema and a parameterless handler → Input is `void`, so execute() needs no argument.
 const now = standardTool({
@@ -202,9 +202,9 @@ test('no inputSchema: input passes through unvalidated', async () => {
   assert.deepEqual(await withFormattedOutput(now).execute(undefined), { iso: '2026-01-01T00:00:00Z' });
 });
 
-test('forwards the per-call meta argument verbatim to the handler', async () => {
+test('forwards the per-call context argument verbatim to the handler', async () => {
   assert.equal(await greet.execute({ name: 'Ada' }, { locale: 'en' }), 'hi Ada');
-  // meta still reaches the handler after formatting.
+  // context still reaches the handler after formatting.
   assert.equal(await withFormattedOutput(greet).execute({ name: 'Bob' }, { locale: 'fr' }), 'bonjour Bob');
 });
 
@@ -452,13 +452,13 @@ test('withFormattedOutput preserves every field by identity; only execute is rep
   assert.notEqual(wrapped.execute, weather.execute);
 });
 
-test('meta is forwarded by identity, through the builder and the envelope alike', async () => {
+test('context is forwarded by identity, through the builder and the envelope alike', async () => {
   let seen: unknown;
   const spy = standardTool({
     name: 'spy',
-    description: 'records meta',
-    execute: (_input: unknown, meta?: { k: number }) => {
-      seen = meta;
+    description: 'records context',
+    execute: (_input: unknown, context?: { k: number }) => {
+      seen = context;
       return 0;
     },
   });
@@ -467,4 +467,44 @@ test('meta is forwarded by identity, through the builder and the envelope alike'
   assert.equal(seen, m); // same reference, not a copy
   await withFormattedOutput(spy).execute(undefined, m);
   assert.equal(seen, m);
+});
+
+// ── Tool-level `meta`: static data about the tool, distinct from the per-call `context`.
+const annotated = standardTool({
+  name: 'delete_file',
+  description: 'Deletes a file',
+  inputSchema: z.object({ path: z.string() }),
+  meta: { readOnly: false, destructive: true },
+  execute: ({ path }) => `deleted ${path}`,
+});
+
+test('meta is carried by identity through the builder and the envelope', () => {
+  assert.deepEqual(annotated.meta, { readOnly: false, destructive: true });
+  // the same object, not a copy, and it survives formatting
+  assert.equal(withFormattedOutput(annotated).meta, annotated.meta);
+});
+
+test('meta is optional and absent tools leave it undefined', () => {
+  assert.equal(weather.meta, undefined);
+  assert.equal(withFormattedOutput(weather).meta, undefined);
+});
+
+test('meta is inert: it never reaches execute and never enters the JSON Schema', async () => {
+  assert.equal(await annotated.execute({ path: '/tmp/x' }), 'deleted /tmp/x');
+  const params = annotated.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
+  assert.equal(JSON.stringify(params).includes('destructive'), false);
+});
+
+// Untyped by default: reading a field off the bag yields `unknown`, so consumers must narrow.
+expectType<Equals<NonNullable<typeof annotated.meta>[string], unknown>>();
+
+// A consumer that wants a typed bag narrows with an intersection — no extra generic needed.
+type Budgeted = StandardToolV0<{ path: string }, string> & { meta: { budget: number } };
+declare const budgeted: Budgeted;
+expectType<Equals<typeof budgeted.meta.budget, number>>();
+
+test('an intersection-narrowed tool is still an ordinary StandardTool', () => {
+  const typed = annotated as unknown as Budgeted;
+  const asBase: StandardToolV0<{ path: string }, string> = typed; // assignable without a cast
+  assert.equal(asBase.name, 'delete_file');
 });

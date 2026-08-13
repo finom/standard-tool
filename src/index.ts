@@ -1,43 +1,44 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from './standard-schema.js';
 
 /** Portable LLM tool. The type fixes the shape, not where validation runs; ship it neutral, format at the consumer boundary. */
-export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutput = Output, Meta = unknown> {
+export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutput = Output, Context = unknown> {
   name: string;
   title?: string;
   description: string;
   inputSchema?: StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>;
   outputSchema?: StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>;
-  execute(input: Input, meta?: Meta): FormattedOutput | Promise<FormattedOutput>;
+  meta?: Record<string, unknown>;
+  execute(input: Input, context?: Context): FormattedOutput | Promise<FormattedOutput>;
 }
 
 /** Wraps a raw handler so `execute` validates input and output. */
-export function standardTool<Input = void, Output = unknown, Meta = unknown>(
-  def: StandardToolV0<Input, Output, Output, Meta>
-): StandardToolV0<Input, Output, Output, Meta> {
+export function standardTool<Input = void, Output = unknown, Context = unknown>(
+  def: StandardToolV0<Input, Output, Output, Context>
+): StandardToolV0<Input, Output, Output, Context> {
   return {
     ...def,
-    execute: async (input: Input, meta?: Meta): Promise<Output> => {
+    execute: async (input: Input, context?: Context): Promise<Output> => {
       const value = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
-      const output = await def.execute(value, meta);
+      const output = await def.execute(value, context);
       return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
     },
   };
 }
 
 /** Wrap a neutral tool so failures return as data, not throws. Apply once, at the consumer boundary. */
-export function withFormattedOutput<Input, Output, FormattedOutput = Output | { error: string }, Meta = unknown>(
-  tool: StandardToolV0<Input, Output, NoInfer<Output>, Meta>,
+export function withFormattedOutput<Input, Output, FormattedOutput = Output | { error: string }, Context = unknown>(
+  tool: StandardToolV0<Input, Output, NoInfer<Output>, Context>,
   format?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>
-): StandardToolV0<Input, Output, FormattedOutput, Meta> {
+): StandardToolV0<Input, Output, FormattedOutput, Context> {
   const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
     result: Output | Error
   ) => FormattedOutput | Promise<FormattedOutput>;
   return {
     ...tool,
-    execute: async (input: Input, meta?: Meta): Promise<FormattedOutput> => {
+    execute: async (input: Input, context?: Context): Promise<FormattedOutput> => {
       let result: Output | Error;
       try {
-        result = await tool.execute(input, meta);
+        result = await tool.execute(input, context);
       } catch (error) {
         result = error instanceof Error ? error : new Error(String(error), { cause: error });
       }

@@ -27,7 +27,8 @@
     "test": "npm run build && npm run typecheck && npm run lint && node --test",
     "patch": "npm test && npm version patch",
     "minor": "npm test && npm version minor",
-    "postversion": "git push && git push --tags"
+    "postversion": "git push && git push --tags",
+    "prepublishOnly": "node -e \"if (!process.env.CI) throw new Error('Publish from CI: run npm run patch, the tag push publishes')\""
   },
   "keywords": [
     "standard-schema",

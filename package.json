@@ -1,7 +1,7 @@
 {
   "name": "standard-tool",
   "version": "0.1.0",
-  "description": "One type for an LLM tool — define it once, use it with any provider, SDK, or framework. Input & output validated via Standard Schema and emitted as JSON Schema. Zero dependencies.",
+  "description": "One type for an LLM tool \u2014 define it once, use it with any provider, SDK, or framework. Input & output validated via Standard Schema and emitted as JSON Schema. Zero dependencies.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -9,19 +9,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./package.json": "./package.json"
+    }
   },
   "files": [
     "dist",
-    "src",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "WHY.md"
   ],
   "scripts": {
     "build": "tsc",
     "build:site": "node scripts/build-site.mjs",
     "prepare": "tsc",
-    "typecheck": "tsc -p tsconfig.test.json",
+    "typecheck": "tsc -p test",
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "test": "npm run build && npm run typecheck && npm run lint && node --test",
@@ -57,14 +56,14 @@
     "url": "https://github.com/finom/standard-tool/issues"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.16",
-    "@orpc/server": "^1.14.7",
+    "@biomejs/biome": "^2.5.12",
+    "@orpc/server": "^1.15.0",
     "@trpc/server": "^11.18.0",
-    "@types/node": "^25.9.1",
+    "@types/node": "^26.4.1",
     "@valibot/to-json-schema": "^1.7.1",
     "arktype": "^2.2.3",
     "typescript": "^7.0.2",
     "valibot": "^1.4.2",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   }
 }

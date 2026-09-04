@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The published package no longer contains `src`; types and source maps come from `dist` (sources are inlined into the maps). The `./package.json` export subpath was removed.
+- Transforming schemas are supported: `inputSchema` is `StandardSchemaV1<Input, unknown>` (`Input` is its input side — what `execute` accepts and what the emitted JSON Schema describes), `outputSchema` is `StandardSchemaV1<unknown, Output>` (`Output` is its output side, the validated result). `standardTool()` hands the handler the validated input and validates the raw result; its type parameters changed accordingly.
+
 ## [0.1.0] - 2026-08-13
 
 ### Added
@@ -31,7 +36,7 @@ Final release of the `0.0` line. `0.0.1`–`0.0.5` were experimental iterations 
 ### Changed
 
 - `standardTool()` takes and returns a `StandardToolV0` — the definition is the tool shape, with your raw handler as its `execute`.
-- `execute` has one fixed signature, `execute(input, meta?)`; `input` is always present.
+- `execute` has one fixed signature with an optional second argument; `input` is always present.
 - Schemas must be non-transforming: the single `Input` generic is both the wire type and the validated type, so `.transform()`, `.pipe()` and `z.coerce` do not fit.
 
 ### Removed

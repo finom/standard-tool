@@ -1,8 +1,9 @@
 <!-- hero-start -->
 <p align="center"><img src="docs/logo.svg" width="84" height="84" alt="Standard Tool logo"></p>
 <h1 align="center">Standard Tool</h1>
-<p align="center">One type for an LLM tool.<br>Define it once, use it with any provider, SDK, or framework.</p>
+<p align="center">One type for an LLM tool.<br>One interface shared across providers, SDKs, and frameworks.</p>
 <p align="center"><a href="https://standard-tool.js.org">standard-tool.js.org</a></p>
+<p align="center"><a href="https://scorecard.dev/viewer/?uri=github.com/finom/standard-tool"><img src="https://api.scorecard.dev/projects/github.com/finom/standard-tool/badge" alt="OpenSSF Scorecard"></a></p>
 <!-- hero-end -->
 
 ```ts
@@ -14,36 +15,24 @@ interface StandardToolV0<
   name: string;
   title?: string; // human label; shown by MCP-style clients in tool lists
   description: string;
-  inputSchema?: StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>;
-  outputSchema?: StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>;
+  inputSchema?: StandardSchemaV1<Input, unknown> & StandardJSONSchemaV1<Input, unknown>;
+  outputSchema?: StandardSchemaV1<unknown, Output> & StandardJSONSchemaV1<unknown, Output>;
   meta?: Record<string, unknown>; // static data about the tool, for consumers to read
   execute(input: Input, context?: Context): FormattedOutput | Promise<FormattedOutput>;
 }
 ```
 
-That's all of it. The shape is a **self-describing function**: the callable plus its name, description, and schemas in one value. It's an **interface, not a library you depend on**: any object of this shape is a StandardTool, so you can conform with a plain object and zero dependencies, the same way Zod, Valibot, and ArkType conform to Standard Schema. Producing a tool takes an object literal; consuming one takes a `try`/`catch` — `execute` throws on failure, and a bare catch turns that into data for the model. The npm package is a reference implementation.
+`StandardToolV0` is the shape of a **self-describing function**: a callable together with its name, description, and schemas. Any object of this shape conforms; nothing is required beyond a schema library implementing [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema) (Zod 4.2+, ArkType 2.1.28+, Valibot via `@valibot/to-json-schema`). The schemas provide static types, runtime validation, and JSON Schema emission via `inputSchema['~standard'].jsonSchema.input({ target })`. The npm package is a reference implementation.
 
-The schemas pull double duty: they validate runtime data (a model's arguments are untrusted) and emit JSON Schema for the model via `inputSchema['~standard'].jsonSchema.input({ target })` — `~standard` is the property Standard Schema reserves for its interface; your schema library defines it, never you. Any library implementing both [Standard Schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema) works: Zod 4.2+ and ArkType 2.1.28+ expose it on the schema directly; Valibot via `toStandardJsonSchema()` from `@valibot/to-json-schema` 1.5+.
+> **Status: RFC.** The `V0` shape is frozen — a breaking change would be `StandardToolV1`; the reference package follows its own `0.x` semver. [Critiques and counter-proposals welcome.](https://github.com/finom/standard-tool/issues)
 
-> **Status: RFC.** `V0` versions the interface, the way `StandardSchemaV1` versions Standard Schema — the shape is frozen for `V0`; a breaking change to it would be `StandardToolV1`. The reference package follows its own `0.x` semver and may still change helper names and the formatting layer. [Critiques and counter-proposals welcome.](https://github.com/finom/standard-tool/issues)
+Why one type, how existing tool objects compare, and the case against: **[WHY.md](./WHY.md)**.
 
-## Why
-
-Every LLM ecosystem ships its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain. Strip any of them and the same five parts fall out — a name, a description, an input schema, an output schema, and an execute function — plus a little display metadata. A tool written for one framework is not portable to the others.
-
-The hard part of that list is already solved. [Standard Schema](https://standardschema.dev) unified validation; [Standard JSON Schema](https://standardschema.dev/json-schema) unified JSON Schema emission. Once the schemas cover both jobs, everything left in a tool is two strings and a function.
-
-Frameworks keep reinventing the trivial envelope and binding it to their runtime, while the one shared piece gets treated as proprietary. Standard Tool standardizes the envelope too: a ten-line interface, no runtime, no lock-in. [The full survey is below.](#how-it-compares)
-
-## Writing a tool
-
-More than one way to the same shape.
-
-**With the type.** Any object of the shape is a StandardTool — no builder, no runtime; validation is yours to place:
+## Defining a tool
 
 ```ts
-import { z } from 'zod'; // or arktype, or valibot + @valibot/to-json-schema
-import type { StandardToolV0 } from 'standard-tool'; // types-only — or paste the interface above
+import { z } from 'zod'; // or arktype, or valibot
+import type { StandardToolV0 } from 'standard-tool'; // types only — or paste the interface above
 
 const getWeather: StandardToolV0<{ city: string }, { tempC: number }> = {
   name: 'get_weather',
@@ -52,20 +41,87 @@ const getWeather: StandardToolV0<{ city: string }, { tempC: number }> = {
   outputSchema: z.object({ tempC: z.number() }),
   execute: async ({ city }) => ({ tempC: 21 }),
 };
-
-// JSON Schema for the model (empty object when the tool takes no input):
-const parameters = getWeather.inputSchema?.['~standard'].jsonSchema
-  .input({ target: 'draft-2020-12' }) ?? { type: 'object', properties: {} };
 ```
 
-**With the builder.** Same fields through the reference `standardTool()` — a model's args are untrusted, so it wires the validation into `execute`:
+Three ways to use it:
+
+<table>
+<tr>
+<th>Call it directly</th>
+<th>Use it as an AI tool</th>
+<th>Render docs or a prompt</th>
+</tr>
+<tr>
+<td>
+<pre>
+await getWeather
+  .execute({ city: 'Paris' });
+// { tempC: 21 }
+</pre>
+</td>
+<td>
+<pre>
+getWeather.inputSchema
+  ?.['~standard'].jsonSchema
+  .input({ target });
+// → the provider's schema field
+&#8203;
+await getWeather.execute(args);
+// → result for the model
+</pre>
+</td>
+<td>
+<pre>
+getDocs([getWeather]);
+// your renderer ↓
+&#35; Available functions
+&#8203;
+&#45; get_weather({ city: string })
+  => { tempC: number }:
+  Current temperature for a city
+</pre>
+</td>
+</tr>
+</table>
+
+Provider field names and dialects: [wiring table](#wiring-a-provider). The same fields also serve UIs, forms, and CLIs: [Beyond LLM tools](./WHY.md#beyond-llm-tools). Tools can be derived from RPC procedures you already have: [tRPC, oRPC](./WHY.md#from-procedures-you-already-have).
+
+## Per-call `context`
+
+`context` is `execute`'s optional second argument — per-call data like a locale, an auth token, a request-scoped handle. Never validated, never in the JSON Schema. Annotate it on the handler (`execute: (input, context: { locale: string }) => …`) and it types every caller.
+
+## Tool-level `meta`
+
+`meta` is per-tool data consumers read and `execute` never sees: `{ destructive: true, tags: ['fs'] }` — confirmation hints, tool selection, ownership. Untyped by design (a generic erases to `unknown` in `StandardToolV0[]`); narrow with `& { meta: { budget: number } }` when you want types. The spec fixes no keys — agree within your system, or follow MCP's tool annotations.
+
+## The interface
+
+| field | type | purpose |
+| --- | --- | --- |
+| `name` | `string` | identifier the model emits |
+| `description` | `string` | what the tool does |
+| `title?` | `string` | human label for MCP-style tool lists; ignored by plain function-calling APIs |
+| `inputSchema?` | `StandardSchemaV1<Input, unknown> & StandardJSONSchemaV1<Input, unknown>` | validates and emits JSON Schema; `Input` is its input side |
+| `outputSchema?` | `StandardSchemaV1<unknown, Output> & StandardJSONSchemaV1<unknown, Output>` | validates and emits JSON Schema; `Output` is its output side |
+| `meta?` | `Record<string, unknown>` | static data about the tool; read by consumers, never passed to `execute` |
+| `execute` | `(input: Input, context?: Context) => FormattedOutput \| Promise<FormattedOutput>` | runs the tool; input untrusted until checked against `inputSchema`; may throw |
+
+## The reference implementation
+
+Two helpers over the same shape; conforming requires neither.
+
+Copy [`src/index.ts`](https://github.com/finom/standard-tool/blob/main/src/index.ts) into your project — ~90 lines — replacing its first import with the types-only [`@standard-schema/spec`](https://github.com/standard-schema/standard-schema). Or install the package:
 
 ```sh
 npm i standard-tool
 ```
 
+- `standardTool(def)` returns the definition with validation wired into `execute`: input checked before the handler runs, output after. The handler receives the validated input (the input schema's *output* side) and returns the raw result the output schema validates. Violations throw `StandardToolValidationError`, carrying `target: 'input' | 'output'` and the Standard Schema `issues`.
+- `withFormattedOutput(tool, format?)` is the bare-`catch` recipe written once, with types: a throw inside `execute` reaches the caller as data.
+
 ```ts
-import { standardTool } from 'standard-tool';
+import { standardTool, withFormattedOutput } from 'standard-tool';
+import { z } from 'zod';
 
 const getWeather = standardTool({
   name: 'get_weather',
@@ -73,579 +129,55 @@ const getWeather = standardTool({
   inputSchema: z.object({ city: z.string() }),
   outputSchema: z.object({ tempC: z.number() }),
   execute: async ({ city }) => ({ tempC: 21 }),
-});
+}); // execute validates input and output
 
-// { tempC: 21 } — validated in & out; throws StandardToolValidationError on a violation
-await getWeather.execute({ city: 'Paris' });
+await getWeather.execute({ city: 123 } as never); // throws StandardToolValidationError
+
+await withFormattedOutput(getWeather).execute({ city: 123 } as never);
+// { error: 'input validation failed: city: …' }
+
+const asText = withFormattedOutput(getWeather, (r) =>
+  r instanceof Error ? `error: ${r.message}` : `${r.tempC}°C`);
+await asText.execute({ city: 'Paris' }); // '21°C'
 ```
 
-To avoid the dependency entirely, [copy-paste the ~80-line source](#copy-paste-the-source).
+The formatter receives the validated `Output` or an `Error`, runs once per call, and its own throws propagate unformatted. It accepts only tools whose `execute` still returns the plain `Output`, so wrapping an already-wrapped tool is a compile error. Frameworks with their own formatting hook (`toModelOutput` in the AI SDK, Mastra) don't need it — hand them the tool unwrapped.
 
-**From procedures you already have.** A tool is a name, an input schema, and a handler — which is also what an RPC procedure is. A framework whose procedures validate with [Standard Schema](https://standardschema.dev) already holds two of the three — the schema and the handler; when the schema also carries [Standard JSON Schema](https://standardschema.dev/json-schema), reuse it as `inputSchema` and route `execute` through the framework's server-side caller. With [tRPC](https://trpc.io), that caller comes from your existing router:
+## Wiring a provider
 
-```ts
-import { standardTool } from 'standard-tool';
-import { appRouter, cityInput } from './trpc'; // your existing router + its input schema
-
-const caller = appRouter.createCaller({}); // {} is the tRPC context
-
-const getWeather = standardTool({
-  name: 'get_weather',
-  description: 'Current temperature for a city',
-  inputSchema: cityInput,
-  execute: (input) => caller.getWeather(input),
-});
-```
-
-No annotations: `standardTool` infers input and output from the schema and the caller. The schema emits the JSON Schema; the caller keeps tRPC's own validation and context. The same trick fits any RPC framework on Standard Schema — [oRPC](https://orpc.dev) among them. So it isn't only *write a tool, get a tool*: a typed API surface you already have is a tool source, no rewrite.
-
-## Formatting the result
-
-A plain tool returns its `Output` and throws on failure. That's right for typed code, but inside a model loop you usually want a failure to come back as *data* the model can correct from, and some consumers (MCP) want a specific result envelope. The contract already covers this — `execute` throws — so any consumer turns failure into data with a bare `try`/`catch` and zero imports:
+Every integration hands the provider the same descriptor — `name`, `description`, and the emitted JSON Schema — then runs `execute` on the model's call. Typed here for Anthropic; the table maps the rest:
 
 ```ts
+import type Anthropic from '@anthropic-ai/sdk';
+
+const descriptor: Anthropic.Tool = {
+  name: tool.name,
+  description: tool.description,
+  input_schema: (tool.inputSchema?.['~standard'].jsonSchema
+    .input({ target: 'draft-2020-12' }) ??
+    { type: 'object', properties: {} }) as Anthropic.Tool.InputSchema,
+};
+
+// execute throws on failure; catch to hand the model something to correct from
 let result: unknown;
 try { result = await tool.execute(args); }
 catch (e) { result = { error: e instanceof Error ? e.message : String(e) }; }
 ```
 
-`withFormattedOutput()` is this, written once, with types — it wraps a tool without touching `Input` or `Output`. Take the builder-made `getWeather`:
-
-```ts
-// throws StandardToolValidationError
-await getWeather.execute({ city: 123 } as never);
-// returns { error: 'input validation failed: …' }
-await withFormattedOutput(getWeather).execute({ city: 123 } as never);
-```
-
-It takes any `(result: Output | Error) => FormattedOutput`. The formatter gets the validated `Output` on success and an `Error` on failure (a `StandardToolValidationError` carrying `target` and the Standard Schema `issues`); with no formatter it uses the default `{ error }` envelope. The formatter runs exactly once per call, and what *it* throws propagates unformatted — so it can rethrow errors that belong to the app rather than the model. The formatter's return type becomes `FormattedOutput` (the third generic):
-
-```ts
-const asText = withFormattedOutput(getWeather, (r) =>
-  r instanceof Error ? `error: ${r.message}` : `${r.tempC}°C`,
-);
-await asText.execute({ city: 'Paris' }); // '21°C'
-```
-
-Formatting is the **consumer's last step, applied once at its own boundary**: a tool is **neutral** when `FormattedOutput = Output`. Ship and share tools neutral, and let each consumer re-target the same tool for itself. `withFormattedOutput` accepts only neutral tools, so re-formatting an already-formatted tool is a type error rather than a stacked envelope.
-
-Frameworks that ship their own formatting hook — `toModelOutput` in the [AI SDK](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool), [Mastra](https://mastra.ai/reference/tools/create-tool), and [VoltAgent](https://voltagent.dev/docs/agents/tools/) — don't need this: hand them the neutral tool and format inside their hook. `withFormattedOutput` is for consumers without one: raw provider loops, hand-rolled MCP servers.
-
-## Per-call context (`context`)
-
-`execute` takes an optional second argument, `context`. It's never validated and never in the JSON Schema. Use it for a locale, an auth token, a request-scoped DB handle: the tool stays defined once at module scope while you inject context at call time.
-
-Annotate `context` on the handler and the type propagates to every caller:
-
-```ts
-const greet = standardTool({
-  name: 'greet',
-  description: 'Greet a person in the caller-supplied locale',
-  inputSchema: z.object({ name: z.string() }),
-  execute: ({ name }, context: { locale: string }) =>
-    context.locale === 'fr' ? `bonjour ${name}` : `hi ${name}`,
-});
-
-await greet.execute({ name: 'Ada' }, { locale: 'fr' }); // 'bonjour Ada'
-// compile error: Context is { locale: string }
-await greet.execute({ name: 'Ada' }, { locale: 7 });
-```
-
-## Tool-level data (`meta`)
-
-`context` travels with a *call*; `meta` travels with the *tool*. It's a plain untyped bag that consumers read and `execute` never sees — behavioural hints (is this destructive? safe to auto-run without asking the user?), tags for deciding which tools go into a given prompt, a version, an owning team:
-
-```ts
-const deleteFile = standardTool({
-  name: 'delete_file',
-  description: 'Delete a file',
-  inputSchema: z.object({ path: z.string() }),
-  meta: { destructive: true, tags: ['fs'] },
-  execute: ({ path }) => unlink(path),
-});
-
-if (deleteFile.meta?.destructive) await confirmWithUser(); // consumer decides
-```
-
-It's deliberately `Record<string, unknown>` rather than a fifth generic: tools are usually held as `StandardToolV0[]`, where a generic would erase to `unknown` anyway. When you do want a typed bag, narrow with an intersection and it stays an ordinary StandardTool:
-
-```ts
-type BudgetedTool = StandardToolV0<{ path: string }, string> & { meta: { budget: number } };
-declare const tool: BudgetedTool;
-tool.meta.budget; // number
-```
-
-Since the spec fixes no keys, two producers using `meta.destructive` differently still don't interoperate — agree on the keys within your own system, or follow an existing vocabulary such as MCP's tool annotations.
-
-## Using it with any provider
-
-One array of tools, wired into OpenAI, Anthropic, Gemini, the Vercel AI SDK, and MCP. Two parts do the work everywhere:
-
-- `inputSchema['~standard'].jsonSchema.input({ target })` is the JSON Schema you hand the model.
-- `execute(args)` runs the call. Inside a loop, turn a throw into `{ error }` data so the model can self-correct — a bare `try`/`catch`, or `withFormattedOutput(tool).execute(args)` as the examples below do.
-
-Examples use Zod; the model only ever sees emitted JSON Schema, so ArkType and Valibot produce identical calls. They assume you've installed the relevant provider SDK.
-
-### The tools
-
-Built with the reference `standardTool()` so `execute` validates in and out; a plain `StandardToolV0` object wires up identically — validation is then yours to place.
-
-```ts
-// tools.ts
-import { standardTool, type StandardToolV0 } from 'standard-tool';
-import { z } from 'zod';
-
-export const tools: StandardToolV0[] = [
-  standardTool({
-    name: 'get_weather',
-    description: 'Get the current temperature for a city.',
-    inputSchema: z.object({ city: z.string() }),
-    outputSchema: z.object({ tempC: z.number() }),
-    execute: async ({ city }) => ({ tempC: 21 }),
-  }),
-  standardTool({
-    name: 'get_time',
-    description: 'Get the current time in an IANA timezone.',
-    inputSchema: z.object({ timezone: z.string() }),
-    outputSchema: z.object({ iso: z.string() }),
-    execute: async ({ timezone }) =>
-      ({ iso: new Date().toLocaleString('en-US', { timeZone: timezone }) }),
-  }),
-  standardTool({
-    name: 'convert_currency',
-    description: 'Convert an amount between two currencies.',
-    inputSchema: z.object({ amount: z.number(), from: z.string(), to: z.string() }),
-    outputSchema: z.object({ amount: z.number() }),
-    execute: async ({ amount }) => ({ amount: Math.round(amount * 1.08 * 100) / 100 }),
-  }),
-];
-```
-
-### OpenAI
-
-Tool calls arrive as `function_call` items in `res.output`; results go back as `function_call_output`.
-
-```ts
-import OpenAI from 'openai';
-import { withFormattedOutput } from 'standard-tool';
-import { tools } from './tools';
-
-const client = new OpenAI();
-const input: OpenAI.Responses.ResponseInput = [
-  { role: 'user', content: 'What is the weather in Paris?' },
-];
-
-const res = await client.responses.create({
-  model: 'gpt-5.5',
-  input,
-  tools: tools.map((tool): OpenAI.Responses.Tool => ({
-    type: 'function',
-    name: tool.name,
-    description: tool.description,
-    parameters: tool.inputSchema?.['~standard'].jsonSchema
-      .input({ target: 'draft-2020-12' }) ?? { type: 'object', properties: {} },
-    strict: false,
-  })),
-});
-
-input.push(...res.output);
-for (const item of res.output) {
-  if (item.type !== 'function_call') continue;
-  const tool = tools.find((t) => t.name === item.name);
-  if (!tool) continue;
-  const result = await withFormattedOutput(tool).execute(JSON.parse(item.arguments));
-  input.push({
-    type: 'function_call_output',
-    call_id: item.call_id,
-    output: JSON.stringify(result),
-  });
-}
-
-const final = await client.responses.create({ model: 'gpt-5.5', input });
-console.log(final.output_text);
-```
-
-Chat Completions is the same idea with a different envelope: tools nest under a `function` key, calls come back on `message.tool_calls`, and each result is a `role: 'tool'` message.
-
-### Anthropic
-
-The Messages API uses `input_schema`, returns `tool_use` blocks in the assistant message, and expects `tool_result` blocks in the next user message.
-
-```ts
-import Anthropic from '@anthropic-ai/sdk';
-import { withFormattedOutput } from 'standard-tool';
-import { tools } from './tools';
-
-const client = new Anthropic();
-const messages: Anthropic.MessageParam[] = [
-  { role: 'user', content: 'What is the weather in Paris?' },
-];
-
-const res = await client.messages.create({
-  model: 'claude-sonnet-5',
-  max_tokens: 1024,
-  messages,
-  tools: tools.map((tool): Anthropic.Tool => ({
-    name: tool.name,
-    description: tool.description,
-    input_schema: (tool.inputSchema?.['~standard'].jsonSchema
-      .input({ target: 'draft-2020-12' }) ??
-      { type: 'object', properties: {} }) as Anthropic.Tool.InputSchema,
-  })),
-});
-
-messages.push({ role: 'assistant', content: res.content });
-const results: Anthropic.ToolResultBlockParam[] = [];
-for (const block of res.content) {
-  if (block.type !== 'tool_use') continue;
-  const tool = tools.find((t) => t.name === block.name);
-  if (!tool) continue;
-  const result = await withFormattedOutput(tool).execute(block.input);
-  results.push({
-    type: 'tool_result',
-    tool_use_id: block.id,
-    content: JSON.stringify(result),
-  });
-}
-messages.push({ role: 'user', content: results });
-
-const final = await client.messages.create({
-  model: 'claude-sonnet-5',
-  max_tokens: 1024,
-  messages,
-});
-console.log(final.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join(''));
-```
-
-### Gemini
-
-Function declarations take JSON Schema directly through `parametersJsonSchema`; Gemini wants the OpenAPI-3.0 subset, so emit with `target: 'openapi-3.0'`. Calls come back on `response.functionCalls`, and results go back as `functionResponse` parts.
-
-```ts
-import { GoogleGenAI, type Content, type Part } from '@google/genai';
-import { withFormattedOutput } from 'standard-tool';
-import { tools } from './tools';
-
-const ai = new GoogleGenAI({});
-const contents: Content[] = [
-  { role: 'user', parts: [{ text: 'What is the weather in Paris?' }] },
-];
-
-const res = await ai.models.generateContent({
-  model: 'gemini-2.5-flash',
-  contents,
-  config: {
-    tools: [{
-      functionDeclarations: tools.map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        parametersJsonSchema: tool.inputSchema?.['~standard'].jsonSchema
-          .input({ target: 'openapi-3.0' }) ?? { type: 'object', properties: {} },
-      })),
-    }],
-  },
-});
-
-if (res.candidates?.[0]?.content) contents.push(res.candidates[0].content);
-const parts: Part[] = [];
-for (const call of res.functionCalls ?? []) {
-  const tool = tools.find((t) => t.name === call.name);
-  if (!tool) continue;
-  const result = await withFormattedOutput(tool).execute(call.args ?? {});
-  parts.push({ functionResponse: { name: call.name, response: { result } } });
-}
-contents.push({ role: 'user', parts });
-
-const final = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents });
-console.log(final.text);
-```
-
-### Vercel AI SDK
-
-The AI SDK (v7) runs the loop itself. Its `tool()` accepts a Standard Schema directly, so pass `inputSchema` as-is and hand it `execute`:
-
-```ts
-import { generateText, tool, stepCountIs } from 'ai';
-import { openai } from '@ai-sdk/openai';
-import { tools } from './tools';
-
-const { text } = await generateText({
-  model: openai('gpt-5.5'),
-  prompt: 'What is the weather in Paris?',
-  stopWhen: stepCountIs(5),
-  tools: Object.fromEntries(
-    tools.map(({ name, description, inputSchema, execute }) => [
-      name,
-      // don't pass execute positionally: the SDK calls it with its own second
-      // argument (toolCallId, messages, abortSignal), which would land in `context`
-      tool({ description, inputSchema, execute: (input) => execute(input) }),
-    ]),
-  ),
-});
-
-console.log(text);
-```
-
-The SDK validates input; these built tools re-check it (cheap) and add the output validation the SDK skips — input guards your code from the model, output guards the model from your code.
-
-### MCP
-
-An [MCP](https://modelcontextprotocol.io) tool returns a result envelope, `{ content, structuredContent?, isError? }`, and a descriptor whose schemas are JSON Schema. Both come from the same two parts: `jsonSchema.input()` for the descriptor, and a `withFormattedOutput(tool, toMcpResult)` formatter that maps `execute`'s result onto the envelope.
-
-The formatter below is text-only: an object becomes a JSON text block mirrored into `structuredContent` (per MCP's [back-compat guidance](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#structured-content)), and errors return `isError: true` so the model can self-correct. Image, audio, and resource blocks are out of scope.
-
-```ts
-import { withFormattedOutput } from 'standard-tool';
-import { tools } from './tools';
-
-type McpToolResult = {
-  content: { type: 'text'; text: string }[];
-  structuredContent?: Record<string, unknown>;
-  isError?: boolean;
-};
-
-const toMcpResult = (result: unknown): McpToolResult => {
-  if (result instanceof Error)
-    return { content: [{ type: 'text', text: result.message }], isError: true };
-  if (typeof result === 'string') return { content: [{ type: 'text', text: result }] };
-  const text = JSON.stringify(result);
-  if (result !== null && typeof result === 'object' && !Array.isArray(result)) {
-    return {
-      content: [{ type: 'text', text }],
-      structuredContent: result as Record<string, unknown>,
-    };
-  }
-  return { content: [{ type: 'text', text }] };
-};
-
-const mcpTools = tools.map((t) => withFormattedOutput(t, toMcpResult));
-
-// tools/list — emit the descriptor's JSON Schema directly
-const descriptors = mcpTools.map((t) => ({
-  name: t.name,
-  title: t.title,
-  description: t.description,
-  inputSchema: t.inputSchema?.['~standard'].jsonSchema
-    .input({ target: 'draft-2020-12' }) ?? { type: 'object', properties: {} },
-}));
-
-// tools/call — execute validates once, then returns the MCP result shape
-async function call(name: string, args: unknown) {
-  const tool = mcpTools.find((t) => t.name === name);
-  if (!tool) throw new Error(`Unknown tool: ${name}`);
-  // → { content: [{ type: 'text', text: '{"tempC":21}' }],
-  //     structuredContent: { tempC: 21 } }
-  return tool.execute(args);
-}
-```
-
-### Testing
-
-No model, no framework. Data in, data out:
-
-```ts
-import { withFormattedOutput } from 'standard-tool';
-import { tools } from './tools';
-
-const getWeather = tools.find((t) => t.name === 'get_weather')!;
-
-expect(await getWeather.execute({ city: 'Paris' })).toEqual({ tempC: 21 });
-await expect(getWeather.execute({ city: 123 as never })).rejects.toThrow();
-expect(await withFormattedOutput(getWeather).execute({ city: 123 as never }))
-  .toMatchObject({ error: expect.any(String) });
-```
-
-### Notes
-
-- **Who validates.** OpenAI and Anthropic don't check arguments against your schema — the tool's schemas are the only line of validation, so run them on the model's raw args. In the examples that happens inside the built tools' `execute`; `withFormattedOutput` only turns the throw into data.
-- **Bad JSON.** `JSON.parse` runs before `execute`, so guard it if the model might emit invalid JSON syntax; that throws before `execute` can turn a failure into `{ error }`.
-- **JSON Schema targets.** `draft-2020-12` fits OpenAI and Anthropic; use `openapi-3.0` for the OpenAPI subset (Gemini).
-
-## Beyond LLM tools
-
-"LLM tool" is the obvious use, but a **self-describing function** is a callable bundled with everything needed to understand it without running it: a stable `name`, a `description`, and typed `inputSchema`/`outputSchema` that both validate and emit JSON Schema. A model is one consumer that happens to need exactly that bundle. The same bundle drives others:
-
-- **prompt construction** — tell a model what it can call
-- **documentation** — `name` + `description` + schemas → reference docs
-- **UI / forms** — `inputSchema` → a typed form
-- **command palettes / CLIs** — a tool is a described command with typed args
-- **RPC / endpoints** — `name` + schemas + `execute` is a procedure
-
-That opens a use this hasn't had a clean shape for: **portable tools as ordinary library exports.** A library closes auth and config over each `StandardToolV0` and ships them as a client — `new OrdersClient(...)` gives you `client.getOrders`, a member that both runs and self-describes, so a model or framework picks it up with no extra wiring:
-
-```ts
-// in the library: members are StandardTools, auth closed over at construction
-class OrdersClient {
-  constructor(private auth: { apiKey: string }) {}
-
-  getOrders = standardTool({
-    name: 'get_orders',
-    description: "List a user's orders",
-    inputSchema: z.object({ userId: z.string() }),
-    execute: ({ userId }) => { /* …hit the API with this.auth… */ },
-  });
-}
-
-// in the consumer
-const client = new OrdersClient({ apiKey: '…' });
-await client.getOrders.execute({ userId: 'u_1' }); // run it
-await withFormattedOutput(client.getOrders).execute({ userId: 'u_1' }); // → to a model
-client.getOrders.description; // self-describing
-```
-
-It ships like any other library code: a value your caller imports and runs. MCP, by contrast, is a protocol — you stand up a server to speak it. How you build the tool stays idiomatic per library (a class, a factory, a bare export); only the result is fixed — every member is a `StandardToolV0`.
-
-## Copy-paste the source
-
-The helpers below are ~80 lines and can be vendored instead of installing `standard-tool`. Paste this and pull the spec types from the types-only [`@standard-schema/spec`](https://github.com/standard-schema/standard-schema) (`npm i -D @standard-schema/spec`) — same logic as the published package, with the vendored interfaces swapped for that import. (You still bring a Standard Schema library for the schemas themselves, exactly as with the package.)
-
-```ts
-import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
-
-/** Portable LLM tool. The type fixes the shape, not where validation runs; ship it neutral, format at the consumer boundary. */
-export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutput = Output, Context = unknown> {
-  name: string;
-  title?: string;
-  description: string;
-  inputSchema?: StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>;
-  outputSchema?: StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>;
-  meta?: Record<string, unknown>;
-  execute(input: Input, context?: Context): FormattedOutput | Promise<FormattedOutput>;
-}
-
-/** Wraps a raw handler so `execute` validates input and output. */
-export function standardTool<Input = void, Output = unknown, Context = unknown>(
-  def: StandardToolV0<Input, Output, Output, Context>
-): StandardToolV0<Input, Output, Output, Context> {
-  return {
-    ...def,
-    execute: async (input: Input, context?: Context): Promise<Output> => {
-      const value = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
-      const output = await def.execute(value, context);
-      return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
-    },
-  };
-}
-
-/** Wrap a neutral tool so failures return as data, not throws. Apply once, at the consumer boundary. */
-export function withFormattedOutput<Input, Output, FormattedOutput = Output | { error: string }, Context = unknown>(
-  tool: StandardToolV0<Input, Output, NoInfer<Output>, Context>,
-  format?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>
-): StandardToolV0<Input, Output, FormattedOutput, Context> {
-  const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
-    result: Output | Error
-  ) => FormattedOutput | Promise<FormattedOutput>;
-  return {
-    ...tool,
-    execute: async (input: Input, context?: Context): Promise<FormattedOutput> => {
-      let result: Output | Error;
-      try {
-        result = await tool.execute(input, context);
-      } catch (error) {
-        result = error instanceof Error ? error : new Error(String(error), { cause: error });
-      }
-      return fmt(result);
-    },
-  };
-}
-
-export class StandardToolValidationError extends Error {
-  readonly name = 'StandardToolValidationError';
-  constructor(
-    readonly target: 'input' | 'output',
-    readonly issues: readonly StandardSchemaV1.Issue[]
-  ) {
-    super(
-      `${target} validation failed: ${issues
-        .map((i) => {
-          const at = (i.path ?? []).map((s) => String(typeof s === 'object' ? s.key : s)).join('.');
-          return at ? `${at}: ${i.message}` : i.message;
-        })
-        .join('; ')}`
-    );
-  }
-}
-
-async function validate<S extends StandardSchemaV1>(
-  target: 'input' | 'output',
-  schema: S,
-  value: unknown
-): Promise<StandardSchemaV1.InferOutput<S>> {
-  const result = await schema['~standard'].validate(value);
-  if (result.issues) throw new StandardToolValidationError(target, result.issues);
-  return result.value;
-}
-```
-
-## The interface
-
-`StandardToolV0` (top of this README) is the contract — program against the type. `standardTool()` is the reference builder that produces a conforming value; adapt another library's tool to the type and it works just as well.
-
-| field | type | purpose |
-| --- | --- | --- |
-| `name` | `string` | identifier the model emits |
-| `description` | `string` | what the tool does |
-| `title?` | `string` | human label for MCP-style tool lists; ignored by plain function-calling APIs |
-| `inputSchema?` | `StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>` | validates and emits JSON Schema |
-| `outputSchema?` | `StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>` | validates and emits JSON Schema |
-| `meta?` | `Record<string, unknown>` | static data about the tool; read by consumers, never passed to `execute` |
-| `execute` | `(input: Input, context?: Context) => FormattedOutput \| Promise<FormattedOutput>` | runs the tool; input untrusted until checked against `inputSchema`; may throw |
-
-The field table is just [the five parts](#why) with types — `title` and `meta` are the optional extras. (The moon in the logo is Saturn's Dione: **d**escription, **i**nput schema, **o**utput schema, **n**ame, **e**xecute.)
-
-`Input` and `Output` are inferred from the schemas, or from `execute` when a schema is omitted. With no `inputSchema` the input passes through unvalidated. A tool that takes nothing can omit the schema and the parameter — `execute()` then takes no argument — or declare `z.object({})` for consumers like the AI SDK, where `inputSchema` is required. Schemas are optional; when present they must implement both Standard Schema and Standard JSON Schema. They must also be non-transforming (Standard Schema input = output): the single `Input` generic makes `execute`'s parameter both the wire type and the validated type, so `.transform()`/`.pipe()`/`z.coerce` schemas don't fit the type, and `.default()` types the handler's parameter with the pre-default side — apply defaults inside `execute` instead.
-
-The interface fixes the shape, not where validation runs: validate inside `execute` (as the reference builder does) or leave it to the consumer. `standardTool()`'s thrown `StandardToolValidationError` carries `target: 'input' | 'output'` and the Standard Schema `issues`.
-
-## How it compares
-
-The claim in [Why](#why) is that every ecosystem reinvents the envelope while the schema layer underneath is already standardized. The evidence:
-
-**Every tool is the same six things — the five parts plus display metadata.**
-
-| Concern | What it is | Who consumes it |
-| --- | --- | --- |
-| name | stable identifier the model emits | the model |
-| description | natural-language "what / when to use" | the model |
-| input schema | parameter shape, as JSON Schema | the model (to emit args), your code (to validate) |
-| output schema | result shape | your code, some clients (MCP) |
-| execute | the function that runs | your runtime |
-| metadata | title, annotations, hints | clients / UIs |
-
-The two schemas carry all the complexity; everything else is a string or a function.
-
-**The wire formats have converged on JSON-Schema parameters but disagree on the wrapper and dialect.** OpenAI uses `parameters` (with a `strict` mode that constrains the schema); Anthropic uses `input_schema`; MCP uses `inputSchema` plus `outputSchema`; Gemini uses `functionDeclarations` and accepts only an OpenAPI-3.0 subset. Same data, four shapes.
-
-**The framework objects diverge further.** Each invents its own object and welds it to its own runtime:
-
-| Ecosystem | params key | output schema | execute | schema source | standalone? |
-| --- | --- | --- | --- | --- | --- |
-| OpenAI / Anthropic / Gemini | `parameters` / `input_schema` | n/a | you wire it | JSON Schema (dialects vary) | wire format only |
-| MCP | `inputSchema` | `outputSchema` | server handler | JSON Schema | wire format only |
-| Vercel AI SDK | `inputSchema` | `outputSchema` | `execute` | Zod / JSON Schema | needs `ai` |
-| Mastra | `inputSchema` | `outputSchema` | `execute` | Standard JSON Schema | needs `@mastra/core` |
-| Genkit | `inputSchema` | `outputSchema` | fn | Zod | needs a live `genkit()` |
-| LangChain | `schema` | n/a | fn | Zod / inferred | needs `@langchain/core` |
-| **Standard Tool** | `inputSchema` | `outputSchema` | `execute` | Standard (JSON) Schema | **plain object, zero deps** |
-
-The columns are nearly identical; the objects are mutually incompatible, and none is obtainable on its own. There's no `createTool` without `@mastra/core`, no `defineTool` without a live `genkit()` instance, no `tool()` without `ai` or `@langchain/core`. So "just reuse framework X's tool" means adopting framework X. The neutral, zero-dependency slot is empty. (Mastra already builds its schemas on Standard JSON Schema, so the foundation is shared; only the envelope isn't.)
-
-**The schema layer, by contrast, is solved.** [Standard Schema](https://standardschema.dev) is a ~60-line interface co-designed by the authors of Zod, Valibot, and ArkType, already consumed by tRPC and TanStack; it unifies validation. [Standard JSON Schema](https://standardschema.dev/json-schema) adds emission, with the dialect selectable per call (`target` spans multiple JSON Schema standards) and zero runtime dependencies. The envelope is the easy part, and it's the part that's still missing.
-
-## The case against
-
-- **Adoption** ([XKCD 927](https://xkcd.com/927/)). A shape nobody else produces or consumes is just a tidy wrapper for its author, and that's roughly where this sits today. The bet: the shape is obvious enough to make adapters trivial, and Standard Schema showed consumers adopt a neutral interface without a mandate — though it launched co-signed by the incumbent authors of Zod, Valibot, and ArkType, an advantage this proposal doesn't have yet. There's no runtime and no lock-in, so the surface to "win" is small, but it's still one more shape on the pile until others pick it up. This is the strongest objection.
-- **Why not extend an existing primitive?** Mastra's `createTool` and the AI SDK's `tool()` are the closest prior art, but each is bundled inside a framework and returns a framework-coupled value. The neutral slot is empty; this exists to make it concrete enough to argue about.
-- **`outputSchema` is rarely consumed.** Most provider APIs ignore output schemas; only MCP-style clients validate them. Today it earns its place through your own runtime safety and docs, not the model.
-
-## Scope
-
-Not an agent runtime (no loop, plan, or model call), not a model client (no HTTP), not a transport (MCP serves tools over a wire; this shapes them in memory), not a schema library (it consumes Standard Schema), not an orchestrator (no registries, retries, routing). Bring your own.
+What varies is where the schema goes and which dialect:
+
+| Consumer | schema field | `target` | result goes back as |
+| --- | --- | --- | --- |
+| OpenAI | `parameters` | `draft-2020-12` | `function_call_output` item |
+| Anthropic | `input_schema` | `draft-2020-12` | `tool_result` block |
+| Gemini | `parameters` (or `parametersJsonSchema`) | `openapi-3.0` | `functionResponse` part |
+| Vercel AI SDK | `inputSchema` — takes the Standard Schema as-is | — | SDK runs the loop |
+| MCP | `inputSchema` in the descriptor | `draft-2020-12` | `{ content, structuredContent?, isError? }` — map the result and errors onto it |
 
 ## Links
 
 - [Standard Schema](https://standardschema.dev) · [Standard JSON Schema](https://standardschema.dev/json-schema) · [`@standard-schema/spec`](https://github.com/standard-schema/standard-schema)
-- [OpenAI function calling](https://developers.openai.com/api/docs/guides/function-calling) · [Anthropic tool use](https://platform.claude.com/docs/en/build-with-claude/tool-use) · [Gemini function calling](https://ai.google.dev/gemini-api/docs/function-calling) · [MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
+- [OpenAI function calling](https://developers.openai.com/api/docs/guides/function-calling) · [Anthropic tool use](https://platform.claude.com/docs/en/build-with-claude/tool-use) · [Gemini function calling](https://ai.google.dev/gemini-api/docs/function-calling) · [MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)
 - [Vercel AI SDK `tool()`](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool) · [Mastra `createTool`](https://mastra.ai/reference/tools/create-tool) · [Genkit](https://genkit.dev/docs/tool-calling/) · [LangChain](https://www.npmjs.com/package/@langchain/core)
 
 ## License

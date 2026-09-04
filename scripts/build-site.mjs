@@ -1,10 +1,10 @@
 // Builds the docs/ site served at standard-tool.js.org (GitHub Pages).
-// Renders README.md to HTML via GitHub's GFM markdown API, then wraps it in a dark
-// monospace theme. Re-run after editing the README:
+// Renders README.md → docs/index.html and WHY.md → docs/why.html via GitHub's GFM
+// markdown API, then wraps them in a dark monospace theme. Re-run after editing either:
 //   GH_TOKEN=$(gh auth token) node scripts/build-site.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const docs = join(root, 'docs');
@@ -27,7 +27,7 @@ async function render(md) {
 
 // The raw markdown API does not emit heading ids, so in-page #anchor links would be dead.
 // Re-add them with the same slug algorithm GitHub uses (github-slugger).
-const SLUG_STRIP = /[ -⁯⸀-⹿\\'!"#$%&()*+,./:;<=>?@[\]^`{|}~]/g;
+const SLUG_STRIP = /[\u2000-\u206F\u2E00-\u2E7F\\'!"#$%&()*+,./:;<=>?@[\]^`{|}~]/g;
 const slug = (s) => s.toLowerCase().trim().replace(SLUG_STRIP, '').replace(/ /g, '-');
 
 function addHeadingIds(html) {
@@ -46,6 +46,13 @@ function addHeadingIds(html) {
     return `<${tag}${attrs} id="${id}">${inner}</${tag}>`;
   });
 }
+
+// The pages cross-link as markdown files (works on GitHub); on the site those links
+// point at the rendered pages instead.
+const crossLinks = (html) =>
+  html
+    .replace(/href="(?:\.\/)?WHY\.md(#[^"]*)?"/g, (_m, a) => `href="./why.html${a ?? ''}"`)
+    .replace(/href="(?:\.\/)?README\.md(#[^"]*)?"/g, (_m, a) => `href="./${a ?? ''}"`);
 
 const CSS = `:root{--bg:#09090b;--bg-deep:#030712;--fg:#fafafa;--muted:#a1a1aa;--border:#6b7280;--line:#27272a;--mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
 *{box-sizing:border-box}
@@ -82,6 +89,8 @@ footer a:hover{color:var(--fg)}
 .md table{border-collapse:collapse;font-size:13px;display:block;width:max-content;max-width:100%;overflow-x:auto;margin:16px 0}
 .md th,.md td{border:1px solid var(--line);padding:6px 11px;text-align:left;vertical-align:top}
 .md th{font-weight:600}
+.md td pre{margin:0;padding:2px 0;border:0;background:none;font-size:12px}
+.md td:has(pre){padding:6px 7px}
 .md svg.octicon{display:none}
 .md .anchor{text-decoration:none}
 .md .pl-c{color:#8b949e}
@@ -102,7 +111,7 @@ footer a:hover{color:var(--fg)}
 const FAVICON =
   "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%2309090b'/><text x='4' y='12' font-size='10' text-anchor='middle' fill='%23fafafa' font-family='monospace'>%7B</text><text x='12' y='12' font-size='10' text-anchor='middle' fill='%23fafafa' font-family='monospace'>%7D</text><circle cx='8' cy='8' r='2.4' fill='%23d4d4d8'/></svg>";
 
-function page({ title, description, heroHtml = '', bodyHtml }) {
+function page({ title, description, heroHtml = '', bodyHtml, navHtml = '' }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -122,7 +131,7 @@ ${heroHtml}
 ${bodyHtml}
 </main>
 <footer>
-<a href="https://github.com/finom/standard-tool">GitHub</a>
+${navHtml}<a href="https://github.com/finom/standard-tool">GitHub</a>
 <a href="https://www.npmjs.com/package/standard-tool">npm</a>
 <span>hosted on js.org</span>
 <span>the moon is Dione — description, input schema, output schema, name, execute</span>
@@ -135,7 +144,9 @@ ${bodyHtml}
 
 const gh = `<a class="btn" href="https://github.com/finom/standard-tool">GitHub</a>`;
 const npm = `<a class="btn" href="https://www.npmjs.com/package/standard-tool">npm</a>`;
+const why = `<a class="btn" href="./why.html">Why?</a>`;
 
+// ── index.html ← README.md
 const readmeMd = readFileSync(join(root, 'README.md'), 'utf8');
 // The README opens with a centered hero (between hero-start/hero-end markers) for GitHub;
 // the site renders its own hero below, so strip the README's.
@@ -143,7 +154,7 @@ const HERO_END = '<!-- hero-end -->';
 const heroEnd = readmeMd.indexOf(HERO_END);
 if (heroEnd === -1) throw new Error('README hero markers not found');
 const readmeForSite = readmeMd.slice(heroEnd + HERO_END.length);
-let readmeHtml = await render(readmeForSite);
+let readmeHtml = crossLinks(await render(readmeForSite));
 
 // The type is the proposal — make the interface itself the hero's centerpiece:
 // pull the first rendered code block (the StandardToolV0 interface) out of the body.
@@ -154,8 +165,8 @@ readmeHtml = readmeHtml.replace(preMatch[0], '');
 const heroHtml = `<section class="hero">
 <img src="./logo.svg" width="84" height="84" alt="">
 <h1>Standard Tool</h1>
-<p class="tagline">One type for an LLM tool. Define it once, use it with any provider, SDK, or framework instead of rewriting the same object for each.</p>
-<div class="cta">${gh}${npm}</div>
+<p class="tagline">One type for an LLM tool. One interface shared across providers, SDKs, and frameworks.</p>
+<div class="cta">${why}${gh}${npm}</div>
 <div class="md">${preMatch[0]}</div>
 <hr class="hero-rule">
 </section>`;
@@ -164,12 +175,36 @@ writeFileSync(
   join(docs, 'index.html'),
   page({
     title: 'Standard Tool',
-    description:
-      'One type for an LLM tool. Define it once, use it with any provider, SDK, or framework instead of rewriting the same object for each.',
+    description: 'One type for an LLM tool. One interface shared across providers, SDKs, and frameworks.',
     heroHtml,
     bodyHtml: readmeHtml,
+    navHtml: `<a href="./why.html">Why</a>\n`,
   })
 );
+
+// ── why.html ← WHY.md (the site hero carries the title, so strip the markdown H1)
+const whyMd = readFileSync(join(root, 'WHY.md'), 'utf8').replace(/^# Why Standard Tool\n+/, '');
+const whyHtml = crossLinks(await render(whyMd));
+
+const whyHeroHtml = `<section class="hero">
+<a href="./" aria-label="Standard Tool"><img src="./logo.svg" width="84" height="84" alt=""></a>
+<h1>Why Standard Tool</h1>
+<div class="cta"><a class="btn" href="./">← Standard Tool</a>${gh}</div>
+<hr class="hero-rule">
+</section>`;
+
+writeFileSync(
+  join(docs, 'why.html'),
+  page({
+    title: 'Why Standard Tool',
+    description:
+      'Why Standard Tool exists: the problem, the survey of existing LLM tool objects, what the shape does beyond LLM tools, and the case against.',
+    heroHtml: whyHeroHtml,
+    bodyHtml: whyHtml,
+    navHtml: `<a href="./">Standard Tool</a>\n`,
+  })
+);
+
 writeFileSync(join(docs, 'CNAME'), 'standard-tool.js.org\n');
 writeFileSync(join(docs, '.nojekyll'), '');
-console.log('Built: docs/index.html, docs/CNAME, docs/.nojekyll');
+console.log('Built: docs/index.html, docs/why.html, docs/CNAME, docs/.nojekyll');

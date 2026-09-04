@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <title>Standard Tool</title>
   <defs>
     <radialGradient id="moon" cx="0.35" cy="0.32" r="0.95">
       <stop offset="0" stop-color="#e4e4e7"/>

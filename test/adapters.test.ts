@@ -1,23 +1,20 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initTRPC } from '@trpc/server';
+import test from 'node:test';
 import { createRouterClient, os } from '@orpc/server';
-import { z } from 'zod';
+import { initTRPC } from '@trpc/server';
+import { toStandardJsonSchema } from '@valibot/to-json-schema';
 import { type } from 'arktype';
 import * as v from 'valibot';
-import { toStandardJsonSchema } from '@valibot/to-json-schema';
-import { standardTool, type StandardToolV0 } from '../dist/index.js';
+import { z } from 'zod';
+import { type StandardToolV0, standardTool } from '../dist/index.js';
 
-// Extends trpc-example.test.ts beyond Zod + tRPC to the other schema libraries and RPC
-// framework the README names: the "reuse the schema, route execute through a caller"
-// recipe holds for ArkType and Valibot, and for oRPC. All are devDependencies only —
-// the published package keeps zero runtime dependencies.
+// The "reuse the schema, route execute through a caller" recipe, for ArkType, Valibot and oRPC.
 
 type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type ExecOut<T extends { execute: (input: never) => unknown }> = Awaited<ReturnType<T['execute']>>;
 const expectType = <_Pass extends true>(): void => {};
 
-// Every library emits the same JSON Schema for the model — the point of Standard JSON Schema.
+// Every library emits the same JSON Schema.
 const assertCityJsonSchema = (json: { type?: unknown; required?: unknown }): void => {
   assert.equal(json.type, 'object');
   assert.deepEqual(json.required, ['city']);
@@ -46,8 +43,7 @@ test('ArkType: one schema reused for tRPC .input() and the tool inputSchema', as
 
 test('Valibot: one toStandardJsonSchema() wrapper serves both .input() and inputSchema', async () => {
   const t = initTRPC.create();
-  // Valibot needs the wrapper to add Standard JSON Schema; the wrapped object still
-  // validates (Standard Schema), so the one value works for .input() and inputSchema alike.
+  // Valibot needs the wrapper for Standard JSON Schema; it still validates, so one value serves both.
   const cityInput = toStandardJsonSchema(v.object({ city: v.string() }));
   const appRouter = t.router({ getWeather: t.procedure.input(cityInput).query(() => ({ tempC: 21 })) });
   const caller = appRouter.createCaller({});
@@ -95,12 +91,12 @@ test('a no-input procedure becomes a tool whose execute() needs no argument', as
 
   expectType<Equals<ExecOut<typeof now>, { iso: string }>>();
   assert.equal(now.inputSchema, undefined);
-  // no inputSchema + a no-arg handler → Input is void, so execute() takes no argument…
+  // No inputSchema + no-arg handler → Input is void.
   assert.deepEqual(await now.execute(), { iso: '2026-01-01T00:00:00Z' });
-  // …and undefined is still accepted.
+  // undefined is still accepted.
   assert.deepEqual(await now.execute(undefined), { iso: '2026-01-01T00:00:00Z' });
 
-  // Contrast: a tool with a schema keeps a required argument (not void).
+  // A tool with a schema keeps a required argument.
   const typed = standardTool({
     name: 'typed',
     description: 'd',

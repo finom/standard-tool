@@ -41,28 +41,6 @@ export function standardTool<
   };
 }
 
-// Wrap a neutral tool so failures return as data, not throws. Apply once, at the consumer boundary.
-export function withFormattedOutput<Input, Output, FormattedOutput = Output | { error: string }, Context = unknown>(
-  tool: StandardToolV0<Input, Output, NoInfer<Output>, Context>,
-  format?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>
-): StandardToolV0<Input, Output, FormattedOutput, Context> {
-  const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
-    result: Output | Error
-  ) => FormattedOutput | Promise<FormattedOutput>;
-  return {
-    ...tool,
-    execute: async (input: Input, context?: Context): Promise<FormattedOutput> => {
-      let result: Output | Error;
-      try {
-        result = await tool.execute(input, context);
-      } catch (error) {
-        result = error instanceof Error ? error : new Error(String(error), { cause: error });
-      }
-      return fmt(result);
-    },
-  };
-}
-
 export class StandardToolValidationError extends Error {
   readonly name = 'StandardToolValidationError';
   constructor(
@@ -88,4 +66,27 @@ async function validate<S extends StandardSchemaV1>(
   const result = await schema['~standard'].validate(value);
   if (result.issues) throw new StandardToolValidationError(target, result.issues);
   return result.value;
+}
+
+// Optional when copying this file: wrap a neutral tool so failures return as data, not throws.
+// Apply once, at the consumer boundary.
+export function withFormattedOutput<Input, Output, FormattedOutput = Output | { error: string }, Context = unknown>(
+  tool: StandardToolV0<Input, Output, NoInfer<Output>, Context>,
+  format?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>
+): StandardToolV0<Input, Output, FormattedOutput, Context> {
+  const fmt = (format ?? ((r: Output | Error) => (r instanceof Error ? { error: r.message } : r))) as (
+    result: Output | Error
+  ) => FormattedOutput | Promise<FormattedOutput>;
+  return {
+    ...tool,
+    execute: async (input: Input, context?: Context): Promise<FormattedOutput> => {
+      let result: Output | Error;
+      try {
+        result = await tool.execute(input, context);
+      } catch (error) {
+        result = error instanceof Error ? error : new Error(String(error), { cause: error });
+      }
+      return fmt(result);
+    },
+  };
 }

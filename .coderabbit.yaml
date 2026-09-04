@@ -1,4 +1,5 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 reviews:
-  # Approve once review comments are resolved and checks pass, so a merged PR carries an approval.
-  request_changes_workflow: true
+  # Off: this is a one-maintainer repository, so nothing here waits on a review.
+  auto_review:
+    enabled: false

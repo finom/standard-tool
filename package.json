@@ -1,7 +1,7 @@
 {
   "name": "standard-tool",
   "version": "0.1.0",
-  "description": "One type for an LLM tool \u2014 define it once, use it with any provider, SDK, or framework. Built on Standard Schema. RFC.",
+  "description": "Reference implementation of StandardToolV0 \u2014 one type for an LLM tool, portable across providers, SDKs, and frameworks. Zero dependencies, built on Standard Schema.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

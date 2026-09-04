@@ -3,3 +3,5 @@ reviews:
   # Off: this is a one-maintainer repository, so nothing here waits on a review.
   auto_review:
     enabled: false
+  # Without this, disabling auto_review still posts a "Review skipped" comment on every PR.
+  review_status: false

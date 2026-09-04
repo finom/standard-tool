@@ -1,6 +1,6 @@
 # Contributing
 
-This is a proposal for a standard. The interface in [README.md](./README.md) is the specification; the package is a reference implementation of it.
+The interface in [README.md](./README.md) is the specification; this package is a reference implementation of it. `StandardToolV0` is at RFC stage and its shape is frozen, so a change to the interface needs a stronger case than a change to the code around it — [open an issue](https://github.com/finom/standard-tool/issues) before writing one.
 
 ## Requirements for a change
 

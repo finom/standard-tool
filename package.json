@@ -1,6 +1,6 @@
 {
   "name": "standard-tool",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Reference implementation of StandardToolV0 — one type for an LLM tool, portable across providers, SDKs, and frameworks. Zero dependencies, built on Standard Schema.",
   "type": "module",
   "main": "./dist/index.js",

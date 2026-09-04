@@ -26,13 +26,20 @@ jobs:
       - run: npm ci
       - run: npm test
       # A mistyped tag would otherwise publish whatever version package.json happens to hold.
-      - name: Check the tag matches package.json
+      - name: Check the tag matches package.json and jsr.json
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           tag="${GITHUB_REF_NAME#v}"
           pkg="$(node -p 'require("./package.json").version')"
+          jsr="$(node -p 'require("./jsr.json").version')"
           if [ "$tag" != "$pkg" ]; then
             echo "tag v$tag does not match package.json $pkg" >&2
             exit 1
           fi
+          if [ "$tag" != "$jsr" ]; then
+            echo "tag v$tag does not match jsr.json $jsr" >&2
+            exit 1
+          fi
       - run: npm publish --provenance --access public
+      # JSR authenticates through the same OIDC token, so there is no registry secret.
+      - run: npx jsr publish

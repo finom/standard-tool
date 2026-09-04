@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.1] - 2026-09-04
 
 ### Changed
 
@@ -44,6 +44,6 @@ Final release of the `0.0` line. `0.0.1`–`0.0.5` were experimental iterations 
 - `formatted()` as a member of `StandardToolV0`, replaced by `withFormattedOutput()`.
 - The `StandardToolV0Definition` export.
 
-[Unreleased]: https://github.com/finom/standard-tool/compare/v0.1.0...HEAD
+[0.1.1]: https://github.com/finom/standard-tool/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/finom/standard-tool/compare/v0.0.6...v0.1.0
 [0.0.6]: https://github.com/finom/standard-tool/releases/tag/v0.0.6

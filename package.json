@@ -27,7 +27,7 @@
     "test": "npm run build && npm run typecheck && npm run lint && node --test",
     "patch": "npm test && npm version patch",
     "minor": "npm test && npm version minor",
-    "postversion": "npm run build && npm publish && git push && git push --tags"
+    "postversion": "git push && git push --tags"
   },
   "keywords": [
     "standard-schema",

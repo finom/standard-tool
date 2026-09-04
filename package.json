@@ -27,6 +27,7 @@
     "test": "npm run build && npm run typecheck && npm run lint && node --test",
     "patch": "npm test && npm version patch",
     "minor": "npm test && npm version minor",
+    "version": "node -e \"const fs=require('fs'),f='jsr.json',v=require('./package.json').version;fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace(/(\\\"version\\\": \\\")[^\\\"]+/,'$1'+v))\" && git add jsr.json",
     "postversion": "git push && git push --tags",
     "prepublishOnly": "node -e \"if (!process.env.CI) throw new Error('Publish from CI: run npm run patch, the tag push publishes')\""
   },

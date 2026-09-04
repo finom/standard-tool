@@ -30,11 +30,23 @@ async function render(md) {
 const SLUG_STRIP = /[\u2000-\u206F\u2E00-\u2E7F\\'!"#$%&()*+,./:;<=>?@[\]^`{|}~]/g;
 const slug = (s) => s.toLowerCase().trim().replace(SLUG_STRIP, '').replace(/ /g, '-');
 
+// Stripping tags with one regex pass is not sound in general, so repeat to a fixed point.
+// The result only ever becomes a heading id, and slug() drops < > " = & before that.
+function stripTags(html) {
+  let out = html;
+  let prev;
+  do {
+    prev = out;
+    out = out.replace(/<[^>]+>/g, '');
+  } while (out !== prev);
+  return out;
+}
+
 function addHeadingIds(html) {
   const seen = new Map();
   return html.replace(/<(h[1-4])([^>]*)>([\s\S]*?)<\/\1>/g, (whole, tag, attrs, inner) => {
     if (/\sid=/.test(attrs)) return whole;
-    let id = slug(inner.replace(/<[^>]+>/g, ''));
+    let id = slug(stripTags(inner));
     if (!id) return whole;
     if (seen.has(id)) {
       const n = seen.get(id) + 1;

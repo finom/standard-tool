@@ -3,8 +3,6 @@
  * Source: https://github.com/standard-schema/standard-schema (MIT) + https://standardschema.dev/json-schema
  * Identical to the @standard-schema/spec types; vendored here for copy-paste + dependency-free installs.
  */
-/* eslint-disable @typescript-eslint/no-empty-object-type */
-/* eslint-disable @typescript-eslint/no-namespace */
 // #########################
 // ###   Standard Typed  ###
 // #########################

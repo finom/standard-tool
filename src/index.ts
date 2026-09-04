@@ -1,31 +1,47 @@
-import type { StandardSchemaV1, StandardJSONSchemaV1 } from './standard-schema.js';
+// Vendored in ./standard-schema.ts for zero dependencies; when copying this file, use the line below instead.
+// import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
+import type { StandardJSONSchemaV1, StandardSchemaV1 } from './standard-schema.js';
 
-/** Portable LLM tool. The type fixes the shape, not where validation runs; ship it neutral, format at the consumer boundary. */
+// Portable LLM tool. Schemas may transform: `Input` is the input schema's input side, `Output` the output schema's output side.
 export interface StandardToolV0<Input = unknown, Output = unknown, FormattedOutput = Output, Context = unknown> {
   name: string;
   title?: string;
   description: string;
-  inputSchema?: StandardSchemaV1<Input> & StandardJSONSchemaV1<Input>;
-  outputSchema?: StandardSchemaV1<Output> & StandardJSONSchemaV1<Output>;
+  inputSchema?: StandardSchemaV1<Input, unknown> & StandardJSONSchemaV1<Input, unknown>;
+  outputSchema?: StandardSchemaV1<unknown, Output> & StandardJSONSchemaV1<unknown, Output>;
   meta?: Record<string, unknown>;
   execute(input: Input, context?: Context): FormattedOutput | Promise<FormattedOutput>;
 }
 
-/** Wraps a raw handler so `execute` validates input and output. */
-export function standardTool<Input = void, Output = unknown, Context = unknown>(
-  def: StandardToolV0<Input, Output, Output, Context>
-): StandardToolV0<Input, Output, Output, Context> {
+// Wraps a handler so `execute` validates in and out. Param order is inference-driven: the defaults recover the handler's types when a schema is absent.
+export function standardTool<
+  ValidatedInput = void,
+  Input = ValidatedInput,
+  RawOutput = unknown,
+  Output = RawOutput,
+  Context = unknown,
+>(def: {
+  name: string;
+  title?: string;
+  description: string;
+  inputSchema?: StandardSchemaV1<Input, ValidatedInput> & StandardJSONSchemaV1<Input, unknown>;
+  outputSchema?: StandardSchemaV1<RawOutput, Output> & StandardJSONSchemaV1<RawOutput, unknown>;
+  meta?: Record<string, unknown>;
+  execute(input: ValidatedInput, context?: Context): RawOutput | Promise<RawOutput>;
+}): StandardToolV0<Input, Output, Output, Context> {
   return {
     ...def,
     execute: async (input: Input, context?: Context): Promise<Output> => {
-      const value = def.inputSchema ? await validate('input', def.inputSchema, input) : input;
+      const value = def.inputSchema
+        ? await validate('input', def.inputSchema, input)
+        : (input as unknown as ValidatedInput);
       const output = await def.execute(value, context);
-      return def.outputSchema ? await validate('output', def.outputSchema, output) : output;
+      return def.outputSchema ? await validate('output', def.outputSchema, output) : (output as unknown as Output);
     },
   };
 }
 
-/** Wrap a neutral tool so failures return as data, not throws. Apply once, at the consumer boundary. */
+// Wrap a neutral tool so failures return as data, not throws. Apply once, at the consumer boundary.
 export function withFormattedOutput<Input, Output, FormattedOutput = Output | { error: string }, Context = unknown>(
   tool: StandardToolV0<Input, Output, NoInfer<Output>, Context>,
   format?: (result: Output | Error) => FormattedOutput | Promise<FormattedOutput>

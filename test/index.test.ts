@@ -1,21 +1,19 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { z } from 'zod';
-import { standardTool, withFormattedOutput, StandardToolValidationError, type StandardToolV0 } from '../dist/index.js';
+import { type StandardToolV0, StandardToolValidationError, standardTool, withFormattedOutput } from '../dist/index.js';
 
-// Compile-time type assertions (checked by `npm run typecheck`). expectType<T> accepts
-// only `true`, so a wrong type fails to compile. ExecOut<T> = the awaited execute() return;
-// ContextParam<T> = execute()'s context parameter type.
+// Compile-time assertions: expectType<T> accepts only `true`, so a wrong type fails to compile.
 type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type ExecOut<T extends { execute: (input: never) => unknown }> = Awaited<ReturnType<T['execute']>>;
 type ContextParam<T extends { execute: (input: never) => unknown }> = Parameters<T['execute']>[1];
 const expectType = <_Pass extends true>(): void => {};
 
-// Real Zod schemas (Zod 4.2+ implements both Standard Schema and Standard JSON Schema).
+// Zod 4.2+ implements both Standard Schema and Standard JSON Schema.
 const inputSchema = z.object({ city: z.string() });
 const outputSchema = z.object({ tempC: z.number() });
 
-// A neutral tool: execute validates in & out and returns the raw Output, throwing on a violation.
+// A neutral tool: execute validates in & out, throwing on a violation.
 const weather = standardTool({
   name: 'get_weather',
   description: 'Current temperature for a city',
@@ -23,7 +21,7 @@ const weather = standardTool({
   outputSchema,
   execute: async () => ({ tempC: 21 }),
 });
-// Neutral form: FormattedOutput defaults to Output, so execute returns the raw Output (no envelope).
+// Neutral: FormattedOutput defaults to Output.
 expectType<Equals<ExecOut<typeof weather>, { tempC: number }>>();
 weather satisfies StandardToolV0<{ city: string }, { tempC: number }>;
 weather satisfies StandardToolV0<{ city: string }, { tempC: number }, { tempC: number }>;
@@ -42,7 +40,7 @@ const weatherEnvelope = withFormattedOutput(weather);
 expectType<Equals<ExecOut<typeof weatherEnvelope>, { tempC: number } | { error: string }>>();
 weatherEnvelope satisfies StandardToolV0<{ city: string }, { tempC: number }, { tempC: number } | { error: string }>;
 
-// withFormattedOutput(tool, fmt) swaps only the 3rd generic; the underlying Output is unchanged.
+// A formatter swaps only the 3rd generic; Output is unchanged.
 const toStr = (r: { tempC: number } | Error): string => (r instanceof Error ? `error: ${r.message}` : `ok: ${r.tempC}`);
 const weatherStr = withFormattedOutput(weather, toStr);
 expectType<Equals<ExecOut<typeof weatherStr>, string>>();
@@ -52,7 +50,7 @@ weatherStr satisfies StandardToolV0<{ city: string }, { tempC: number }, string>
 const weatherAsync = withFormattedOutput(weather, async (r) => ({ status: r instanceof Error ? r.message : 'ok' }));
 expectType<Equals<ExecOut<typeof weatherAsync>, { status: string }>>();
 
-// Only neutral tools (FormattedOutput = Output) are accepted: re-formatting an already-formatted tool is a type error.
+// Only neutral tools are accepted; re-formatting is a type error.
 // @ts-expect-error weatherStr's execute returns string, not its Output { tempC: number }
 withFormattedOutput(weatherStr, toStr);
 // @ts-expect-error the default { error } envelope is already formatted — a bare double wrap is rejected too
@@ -60,7 +58,7 @@ withFormattedOutput(withFormattedOutput(weather));
 // @ts-expect-error an enveloped tool cannot be re-wrapped with a new formatter either
 withFormattedOutput(withFormattedOutput(weather), toStr);
 
-// per-call context: annotating it on the handler sets the tool's `Context` generic, which propagates to every caller.
+// Annotating context on the handler sets the tool's `Context` generic.
 const greet = standardTool({
   name: 'greet',
   description: 'greets a person in the caller-supplied locale',
@@ -82,7 +80,7 @@ const now = standardTool({
 expectType<Equals<ExecOut<typeof now>, { iso: string }>>();
 now satisfies StandardToolV0<void, { iso: string }>;
 
-// The MCP text-only formatter recipe from the README, verified here.
+// An MCP text-only formatter (the envelope the README wiring table names), verified here.
 type McpToolResult = {
   content: { type: 'text'; text: string }[];
   structuredContent?: Record<string, unknown>;
@@ -507,4 +505,31 @@ test('an intersection-narrowed tool is still an ordinary StandardTool', () => {
   const typed = annotated as unknown as Budgeted;
   const asBase: StandardToolV0<{ path: string }, string> = typed; // assignable without a cast
   assert.equal(asBase.name, 'delete_file');
+});
+
+// ── Transforming schemas: Input is the schema's input side (what execute accepts and
+//    what the emitted JSON Schema describes); the handler receives the validated side.
+const shout = standardTool({
+  name: 'shout',
+  description: 'Uppercase a word',
+  inputSchema: z.object({ word: z.string().transform((w) => w.length) }),
+  outputSchema: z.object({ len: z.number().transform((n) => `${n}!`) }),
+  execute: ({ word }) => ({ len: word }), // word is number here — the validated side
+});
+type ExecIn<T extends { execute: (input: never) => unknown }> = Parameters<T['execute']>[0];
+expectType<Equals<ExecIn<typeof shout>, { word: string }>>(); // wire side in
+expectType<Equals<ExecOut<typeof shout>, { len: string }>>(); // transformed side out
+shout satisfies StandardToolV0<{ word: string }, { len: string }>;
+
+test('transforming schemas: execute takes the wire type, the handler gets the validated type', async () => {
+  assert.deepEqual(await shout.execute({ word: 'hey' }), { len: '3!' });
+});
+
+test('transforming inputSchema still emits the wire-side JSON Schema', () => {
+  const json = shout.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
+  assert.deepEqual(json?.properties, { word: { type: 'string' } });
+});
+
+test('transforming schemas reject invalid wire input as usual', async () => {
+  await assert.rejects(async () => await shout.execute({ word: 5 as never }), StandardToolValidationError);
 });

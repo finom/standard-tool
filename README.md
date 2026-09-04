@@ -108,8 +108,6 @@ Provider field names and dialects: [wiring table](#wiring-a-provider). The same 
 
 ## The reference implementation
 
-Two helpers over the same shape; conforming requires neither.
-
 Copy [`src/index.ts`](https://github.com/finom/standard-tool/blob/main/src/index.ts) into your project — ~90 lines — replacing its first import with the types-only [`@standard-schema/spec`](https://github.com/standard-schema/standard-schema). Or install the package:
 
 ```sh

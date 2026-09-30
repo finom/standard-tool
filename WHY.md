@@ -2,7 +2,7 @@
 
 Why this exists: the problem, how the existing tool objects compare, what else the shape is good for, and the argument against it. The interface and examples are in the [README](./README.md).
 
-Each LLM framework defines its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain. Underneath, each is the same five parts — a name, a description, an input schema, an output schema, and an execute function — plus a little display metadata. A tool written for one framework is not portable to the others.
+Each LLM framework defines its own tool object: Vercel AI SDK, MCP, Mastra, Genkit, LangChain. Underneath, each is the same five parts — a name, a description, an input schema, an output schema, and an execute function — plus a little display metadata. As a rule, a tool written for one framework has to be rewritten for another. Mastra is an exception in one direction: its agents also accept AI SDK tools.
 
 Most of that list is already standardized. [Standard Schema](https://standardschema.dev) covers validation; [Standard JSON Schema](https://standardschema.dev/json-schema) covers turning a schema into JSON Schema. Once the schemas do both jobs, what remains in a tool is two strings and a function.
 

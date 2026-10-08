@@ -26,7 +26,8 @@ jobs:
       - run: npm ci
       - run: npm test
       # A mistyped tag would otherwise publish whatever version package.json happens to hold.
-      - name: Check the tag matches package.json and jsr.json
+      # The GitHub release takes its text from the version's CHANGELOG section.
+      - name: Check the tag matches package.json, jsr.json and CHANGELOG.md
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -38,6 +39,10 @@ jobs:
           fi
           if [ "$tag" != "$jsr" ]; then
             echo "tag v$tag does not match jsr.json $jsr" >&2
+            exit 1
+          fi
+          if ! awk -v h="## [$tag]" 'index($0, h) == 1 { found = 1 } END { exit !found }' CHANGELOG.md; then
+            echo "CHANGELOG.md has no section for $tag" >&2
             exit 1
           fi
       - run: npm publish --provenance --access public
@@ -52,13 +57,20 @@ jobs:
     permissions:
       contents: write # gh release create
     steps:
-      - name: Attach the npm provenance to a GitHub release
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create a GitHub release with the CHANGELOG section and the npm provenance
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           version="${GITHUB_REF_NAME#v}"
           file="$GITHUB_REF_NAME.intoto.jsonl"
+          # The section ends at the next version heading or at the link list.
+          awk -v h="## [$version]" 'index($0, h) == 1 { on = 1; next } on && (/^## \[/ || /^\[[0-9]/) { exit } on' \
+            CHANGELOG.md >notes.md
+          printf '\n[npm](https://www.npmjs.com/package/standard-tool/v/%s)\n' "$version" >>notes.md
           # npm serves the attestations a few minutes after the publish.
           curl -fsSL --retry 40 --retry-delay 15 --retry-all-errors \
             "https://registry.npmjs.org/-/npm/v1/attestations/standard-tool@$version" |
@@ -67,6 +79,5 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "$file" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$file" --verify-tag --title "$GITHUB_REF_NAME" \
-              --notes "[Changelog](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/CHANGELOG.md) · [npm](https://www.npmjs.com/package/standard-tool/v/$version)"
+            gh release create "$GITHUB_REF_NAME" "$file" --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md
           fi

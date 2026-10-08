@@ -3,6 +3,7 @@ name: Publish
 on:
   push:
     tags: ['v*']
+  # A manual run is a dry run: it checks everything and publishes nothing.
   workflow_dispatch:
 
 permissions:
@@ -27,12 +28,13 @@ jobs:
       - run: npm test
       # A mistyped tag would otherwise publish whatever version package.json happens to hold.
       # The GitHub release takes its text from the version's CHANGELOG section.
+      # A dry run checks the version in package.json.
       - name: Check the tag matches package.json, jsr.json and CHANGELOG.md
-        if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          tag="${GITHUB_REF_NAME#v}"
           pkg="$(node -p 'require("./package.json").version')"
           jsr="$(node -p 'require("./jsr.json").version')"
+          tag="$pkg"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then tag="${GITHUB_REF_NAME#v}"; fi
           if [ "$tag" != "$pkg" ]; then
             echo "tag v$tag does not match package.json $pkg" >&2
             exit 1
@@ -45,14 +47,22 @@ jobs:
             echo "CHANGELOG.md has no section for $tag" >&2
             exit 1
           fi
-      - run: npm publish --provenance --access public
+      # npm publish --dry-run refuses a version already on npm, so the dry run only packs.
+      - name: Dry run
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          npm pack --dry-run
+          npx jsr publish --dry-run
+      - if: github.event_name != 'workflow_dispatch'
+        run: npm publish --provenance --access public
       # JSR authenticates through the same OIDC token, so there is no registry secret.
-      - run: npx jsr publish
+      - if: github.event_name != 'workflow_dispatch'
+        run: npx jsr publish
 
   # Scorecard's Signed-Releases reads GitHub release assets, not npm.
   release:
     needs: publish
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write # gh release create
@@ -65,19 +75,36 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          file="$GITHUB_REF_NAME.intoto.jsonl"
+          version="$(jq -r .version package.json)"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then version="${GITHUB_REF_NAME#v}"; fi
+          tag="v$version"
+          file="$tag.intoto.jsonl"
           # The section ends at the next version heading or at the link list.
           awk -v h="## [$version]" 'index($0, h) == 1 { on = 1; next } on && (/^## \[/ || /^\[[0-9]/) { exit } on' \
             CHANGELOG.md >notes.md
           printf '\n[npm](https://www.npmjs.com/package/standard-tool/v/%s)\n' "$version" >>notes.md
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            # Dry run: the run summary shows the release text, and nothing is created.
+            {
+              echo "## Release $tag (dry run)"
+              cat notes.md
+              echo
+              if curl -fsSL "https://registry.npmjs.org/-/npm/v1/attestations/standard-tool@$version" |
+                jq -e '.attestations[] | select(.predicateType | startswith("https://slsa.dev/provenance/"))' >/dev/null; then
+                echo "npm provenance for $version: found"
+              else
+                echo "npm provenance for $version: not on npm yet"
+              fi
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           # npm serves the attestations a few minutes after the publish.
           curl -fsSL --retry 40 --retry-delay 15 --retry-all-errors \
             "https://registry.npmjs.org/-/npm/v1/attestations/standard-tool@$version" |
             jq -ce '.attestations[] | select(.predicateType | startswith("https://slsa.dev/provenance/")) | .bundle.dsseEnvelope' \
             >"$file"
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$file" --clobber
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$file" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$file" --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md
+            gh release create "$tag" "$file" --verify-tag --title "$tag" --notes-file notes.md
           fi

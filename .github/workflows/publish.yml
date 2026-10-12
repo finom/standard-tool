@@ -43,10 +43,7 @@ jobs:
             echo "tag v$tag does not match jsr.json $jsr" >&2
             exit 1
           fi
-          if ! awk -v h="## [$tag]" 'index($0, h) == 1 { found = 1 } END { exit !found }' CHANGELOG.md; then
-            echo "CHANGELOG.md has no section for $tag" >&2
-            exit 1
-          fi
+          node scripts/changelog-section.mjs CHANGELOG.md "$tag" >/dev/null
       # npm publish --dry-run refuses a version already on npm, so the dry run only packs.
       - name: Dry run
         if: github.event_name == 'workflow_dispatch'
@@ -79,10 +76,9 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = tag ]; then version="${GITHUB_REF_NAME#v}"; fi
           tag="v$version"
           file="$tag.intoto.jsonl"
-          # The section ends at the next version heading or at the link list.
-          awk -v h="## [$version]" 'index($0, h) == 1 { on = 1; next } on && (/^## \[/ || /^\[[0-9]/) { exit } on' \
-            CHANGELOG.md >notes.md
-          printf '\n[npm](https://www.npmjs.com/package/standard-tool/v/%s)\n' "$version" >>notes.md
+          node scripts/changelog-section.mjs CHANGELOG.md "$version" >notes.md
+          printf '\n[Full changelog](https://github.com/%s/blob/%s/CHANGELOG.md) · [npm](https://www.npmjs.com/package/standard-tool/v/%s)\n' \
+            "$GITHUB_REPOSITORY" "$tag" "$version" >>notes.md
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
             # Dry run: the run summary shows the release text, and nothing is created.
             {
@@ -98,6 +94,8 @@ jobs:
             } | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          # A release that has its provenance is done; its text stays as it is.
+          if gh release view "$tag" --json assets --jq '.assets[].name' 2>/dev/null | grep -qxF "$file"; then exit 0; fi
           # npm serves the attestations a few minutes after the publish.
           curl -fsSL --retry 40 --retry-delay 15 --retry-all-errors \
             "https://registry.npmjs.org/-/npm/v1/attestations/standard-tool@$version" |
@@ -105,6 +103,7 @@ jobs:
             >"$file"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "$file" --clobber
+            gh release edit "$tag" --notes-file notes.md
           else
             gh release create "$tag" "$file" --verify-tag --title "$tag" --notes-file notes.md
           fi

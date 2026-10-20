@@ -5,6 +5,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # init and analyze fail on different versions
+    groups:
+      codeql:
+        patterns: ["github/codeql-action/*"]
   - package-ecosystem: npm
     directory: /
     schedule:
